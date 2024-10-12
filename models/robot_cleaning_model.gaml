@@ -52,7 +52,7 @@ global torus: false {
         
         create species: cleaning_robot number: 2;
         
-        create species: dirt number: 3;
+        create species: dirt number: 1;
         
     }
 
@@ -61,7 +61,6 @@ global torus: false {
     }
 
     reflex pausing when: cycles = cycles_to_pause {
-        write "Pausando simulación";
         cycles <- 0;
         do pause;
     }
@@ -96,8 +95,9 @@ species df {
 species charging_station skills: [fipa] control: simple_bdi {
     rgb station_color <- rgb("green");
     bool occupied <- false;  // Indica si la estación de carga está ocupada
-    int tiempo_carga <- 10;  // Tiempo de carga en ciclos
-    int current_cycle <- 0;  // Contador de ciclos de carga
+    int current_cycle <- 0;  // Contador de ciclos
+    int tiempo_carga <- 10;  // Tiempo que dura la carga en ciclos
+    message charging_robot_request <- nil;  // Mensaje del robot que está en proceso de carga
 
     init {
         location <- {size / 2 - 5, 5};
@@ -106,43 +106,47 @@ species charging_station skills: [fipa] control: simple_bdi {
         }
     }
     
-    // Reflex para recibir solicitudes de carga
-    reflex receive_request when: !empty(requests) {
+      // Reflex para recibir la solicitud de recarga del robot
+    reflex receive_request when: !empty(requests) and !occupied {
         message requestFromRobot <- requests[0];
         write 'Estación de carga recibe una solicitud del robot con contenido ' + requestFromRobot.contents;
+        
+        do agree message: requestFromRobot contents: requestFromRobot.contents;
 
-        if (!occupied) {
-            // Estación disponible, permitir la recarga
-            occupied <- true;
-            current_cycle <- tiempo_carga; // Inicializamos el ciclo de carga
-            do agree message: requestFromRobot contents: requestFromRobot.contents;
+        // Marcar la estación como ocupada y guardar el mensaje del robot
+        occupied <- true;
+        current_cycle <- tiempo_carga;  // Iniciar el ciclo de carga
+        charging_robot_request <- requestFromRobot;
 
-            write "Iniciando recarga para el robot.";
-            list contents;
-            string predicado <- resource_provided;
-            list concept_list <- [];
-            pair resource_type_pair <- "battery"::"charging";
-            add resource_type_pair to: concept_list;
-            pair content_pair_resp <- predicado::concept_list;
-            add content_pair_resp to: contents;
-
-            // Enviar mensaje inform para confirmar que la recarga ha comenzado
-            do inform message: requestFromRobot contents: contents;
-        } else {
-            // Estación ocupada, rechazar la solicitud
-            do refuse message: requestFromRobot contents: requestFromRobot.contents;
-            write "Estación de carga está ocupada, rechazando solicitud del robot.";
-        }
+        write "Estación de carga comienza la recarga, que durará " + tiempo_carga + " ciclos.";
     }
 
-    // Reflex para gestionar el progreso del ciclo de carga
-    reflex charge_progress when: occupied and current_cycle > 0 {
+    // Reflex para gestionar la progresión del tiempo de carga
+    reflex charging_progress when: occupied {
         current_cycle <- current_cycle - 1;  // Reducir el contador de ciclos
 
         if (current_cycle = 0) {
-            // Cuando la carga ha terminado, liberar la estación
+            // Cuando la recarga se complete, enviar el mensaje de confirmación al robot
+            list contents;
+            string predicado <- resource_provided;
+            list concept_list <- [];
+            pair resource_type_pair <- resource_type::"battery";
+            pair quantity_pair <- "battery_level"::100;  // Se recarga la batería a 100%
+            add resource_type_pair to: concept_list;
+            add quantity_pair to: concept_list;
+            pair content_pair_resp <- predicado::concept_list;
+            add content_pair_resp to: contents;
+
+            // Enviar mensaje de confirmación al robot
+            do inform message: charging_robot_request contents: contents;
+
+            write "Estación de carga proporcionó recarga de batería completa al robot.";
+            
+            // Reiniciar el estado de la estación
             occupied <- false;
-            write "Estación de carga ahora está disponible.";
+            charging_robot_request <- nil;
+        } else {
+            write "Recarga en progreso... Quedan " + current_cycle + " ciclos.";
         }
     }
 
@@ -322,11 +326,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
             // El primer robot necesita cargar la batería
             do add_belief(new_predicate(battery_low_belief));
             do add_desire(move_to_charging_station);  // Agregar deseo de moverse a la estación de carga
-        } else if (index = 1) {
-            // El segundo robot necesita detergente
-            do add_belief(new_predicate(resource_needed_belief, ["type"::"detergent"]));
-            do add_desire(move_to_supply_closet);  // Agregar deseo de moverse al armario de repuestos
-        }
+        } 
         
     }
 

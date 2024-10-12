@@ -8,7 +8,7 @@ model test
 global torus: false {
     int size <- 100;
     int cycles <- 0;
-    int cycles_to_pause <- 5;
+    int cycles_to_pause <- 1;
     bool simulation_over <- false;
 
     int num_robots <- 5;
@@ -23,6 +23,7 @@ global torus: false {
     string Sensor_role <- "Sensor";
     string ChargingStation_role <- "ChargingStation";
     string SupplyCloset_role <- "SupplyCloset";
+    string Dirt_role <- "Dirt";
 
     string sweep_action <- "Sweep";
     string mop_action <- "Mop";
@@ -48,20 +49,10 @@ global torus: false {
         create species: environmental_sensor number: 1 {
             location <- {5, 5};
         }
-        create species: environmental_sensor number: 1 {
-            location <- {5, size - 5};
-        }
-        create species: environmental_sensor number: 1 {
-            location <- {size - 5, 5};
-        }
-        create species: environmental_sensor number: 1 {
-            location <- {size - 5, size - 5};
-        }
-        create species: environmental_sensor number: 1 {
-            location <- {size / 2, size / 2};
-        }
         
         create species: cleaning_robot number: 2;
+        
+        create species: dirt number: 3;
         
     }
 
@@ -236,11 +227,46 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
         }
     }
 
+reflex detect_dirt {
+    loop dirt_instance over: species(dirt) {
+        // Calcular la distancia entre el sensor y la suciedad
+        point dirt_location <- dirt_instance.location;
+        float distance_to_dirt <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
+
+        // Si la distancia es menor o igual al radio de detección y la suciedad no ha sido detectada antes
+        if (distance_to_dirt <= 5.0 and !dirt_instance.already_detected) {  // Radio de 5.0 como el área de detección
+            write "¡Suciedad detectada en " + dirt_instance.location + "! Distancia: " + distance_to_dirt;
+            dirt_instance.already_detected <- true;
+            dirt_instance.detected_by_sensor <- self;
+
+            // Notificar la detección de suciedad
+            list contents;
+            string predicado <- dirt_detected;
+            list concept_list <- [];
+            pair dirt_type_pair <- dirt_type::dirt_instance.type;
+            pair location_pair <- location_concept::dirt_instance.location;
+            add dirt_type_pair to: concept_list;
+            add location_pair to: concept_list;
+            pair content_pair_resp <- predicado::concept_list;
+            add content_pair_resp to: contents;
+
+         
+
+            write "Sensor detectó suciedad de tipo " + dirt_instance.type + " en la ubicación " + dirt_instance.location;
+        }
+    }
+}
+
+
+
     aspect sensor_aspect {
         draw geometry: circle(1) color: sensor_color at: location; // Hacer el sensor pequeño
         draw detection_area color: sensor_detection_area_color at: location; // Dibujar el área de detección en la ubicación del sensor
     }
 }
+
+
+
 
 species cleaning_robot skills: [moving, fipa] control: simple_bdi {
     rgb robot_color <- rgb("orange");
@@ -468,22 +494,38 @@ species dirt {
     string type;
     bool already_detected <- false;
     rgb dirt_color;
+    agent detected_by_sensor <- nil;
 
     init {
-        list<agent> sensors <- [];
+        list<agent> sensors;
         
+        ask df {
+            bool registered <- register(Dirt_role, myself);
+        }
+        
+        // Obtener la lista de sensores registrados en el DF
         ask df {
             sensors <- search(Sensor_role);
         }
 
         if (!empty(sensors)) {
+            // Seleccionar aleatoriamente un sensor
             agent sensor_agent <- one_of(sensors);
             point sensor_location <- sensor_agent.location;
-            location <- sensor_location + rnd(point(-10, 10));
+            float radius <- 5.0; // Mismo radio que el área de detección del sensor
+
+            // Generar una posición aleatoria dentro del círculo de detección del sensor
+            float angle <- rnd(0.0, 2 * #pi);
+            float distance <- rnd(0.0, radius);
+            float x_offset <- cos(angle) * distance;
+            float y_offset <- sin(angle) * distance;
+            location <- sensor_location + {x_offset, y_offset};
         } else {
+            // Si no hay sensores, ubicar la suciedad aleatoriamente en el mundo
             location <- rnd(point(size - 10, size - 10)) + {5, 5};
         }
 
+        // Asignar tipo y color a la suciedad
         type <- one_of(["dust", "liquid", "garbage"]);
         if (type = "dust") {
             dirt_color <- rgb("gray");

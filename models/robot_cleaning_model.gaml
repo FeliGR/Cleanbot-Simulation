@@ -1,3 +1,4 @@
+
 /**
  * Name: robot_cleaning_model
  * Author: felipeguzmanrod
@@ -22,7 +23,7 @@ global torus: false {
      */
     int size <- 100;
     int cycles <- 0;
-    int cycles_to_pause <- 1;
+    int cycles_to_pause <- 1000;    /* se para a los 1000 ciclos */
     bool simulation_over <- false;
 
 	/**
@@ -132,6 +133,7 @@ global torus: false {
      */
     reflex pausing when: cycles = cycles_to_pause {
         cycles <- 0;
+        write "Simulación pausada tras " + cycles_to_pause;
         do pause;
     }
 
@@ -295,9 +297,9 @@ species supply_closet skills: [fipa] control: simple_bdi {
     
     /**
      * Attributes:
-     * - closet_color: Color used to represent the supply closet on the grid (blue).
+     * - closet_color: Color used to represent the supply closet on the grid (orange).
      */
-    rgb closet_color <- rgb("blue");
+    rgb closet_color <- rgb("orange");
 
 	/**
      * Initialization:
@@ -347,7 +349,7 @@ species supply_closet skills: [fipa] control: simple_bdi {
 
 	/**
      * Visual aspect:
-     * - Draws a blue square representing the supply closet on the grid.
+     * - Draws an orange square representing the supply closet on the grid.
      */
     aspect closet_aspect {
         draw geometry: square(5) color: closet_color;
@@ -369,7 +371,7 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
      * - detection_area: The geometric area (circle) representing the sensor's detection radius.
      */
     rgb sensor_color <- rgb("red");
-    rgb sensor_detection_area_color <- rgb("purple");
+    rgb sensor_detection_area_color <- rgb("#ffcfcf", 120);   /* light red with transparency*/
     geometry detection_area;
 
 	/**
@@ -391,8 +393,8 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
 
         location <- fixed_locations at sensor_index;
 
-        float radius <- 5.0;
-        detection_area <- circle(radius) translated_by location;
+        float side <- 20.0;
+        detection_area <- square(side) translated_by location;
 
         ask df {
             bool registered <- register(Sensor_role, myself);
@@ -453,13 +455,13 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
    
    /**
      * Attributes:
-     * - robot_color: The color used to represent the robot on the grid (orange).
+     * - robot_color: The color used to represent the robot on the grid (purple).
      * - perceived: Boolean flag indicating whether the robot has perceived something.
      * - speed: The movement speed of the robot.
      * - my_supply_closets: A list of available supply closet agents (found from the DF).
      * - my_charging_stations: A list of available charging station agents (found from the DF).
      */
-    rgb robot_color <- rgb("orange");
+    rgb robot_color <- rgb("purple");
     bool perceived <- false;
     list<agent> my_supply_closets;
     list<agent> my_charging_stations;
@@ -735,10 +737,10 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 
 	/**
      * Visual aspect:
-     * - Draws a small orange circle representing the robot on the grid.
+     * - Draws a small purple circle representing the robot on the grid.
      */
     aspect robot_aspect {
-        draw circle(3) color: robot_color at: location;
+        draw circle(2.5) color: robot_color at: location;
     }
 }
 
@@ -822,7 +824,7 @@ species dirt {
 experiment cleaning_simulation type: gui {
     output {
         display cleaning_display type: java2D {
-            grid my_grid border: rgb("black");
+            grid my_grid border: rgb("#C4C4C4");
             species charging_station aspect: station_aspect;
             species supply_closet aspect: closet_aspect;
             species environmental_sensor aspect: sensor_aspect;
@@ -831,3 +833,4 @@ experiment cleaning_simulation type: gui {
         }
     }
 }
+

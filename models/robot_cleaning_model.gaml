@@ -42,6 +42,10 @@ global torus: false {
     int num_charging_stations <- 1;
     int dirt_quantity <- 1;
     
+    // Variable to control dirt generation intervals
+    int dirt_generation_interval <- 80;
+    int last_dirt_generation <- 0;
+    
     /**
      * Robot-specific attributes
      * - initial_battery: The starting battery level of the robots.
@@ -125,6 +129,22 @@ global torus: false {
         create species: dirt number: dirt_quantity;
     }
 
+
+	/**
+     * Reflex: generate_dirt
+     * Periodically generates new dirt patches on the grid.
+     * - Every 30 cycles, a new dirt patch is created at a random location in the environment.
+     * - The interval is controlled by `dirt_generation_interval`.
+     * - The `last_dirt_generation` variable ensures dirt is generated only once per interval.
+     */
+    reflex generate_dirt {
+        if (cycles - last_dirt_generation >= dirt_generation_interval) {
+            last_dirt_generation <- cycles;
+            create species: dirt number: 1;  // Creates a new dirt patch
+            write "New dirt generated at cycle: " + cycles;
+        }
+    }
+    
 	/**
      * Reflex to count the cycles in the simulation.
      * - Increases the cycle count by 1 on each step.
@@ -489,6 +509,8 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
     bool perceived <- false;
     list<agent> my_supply_closets;
     list<agent> my_charging_stations;
+    list<point> pending_cleaning_tasks <- [];
+    bool cleaning_in_progress <- false;
 
 	/**
      * Belief-related attributes:
@@ -567,7 +589,6 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
             do add_desire(move_to_supply_closet);  // Agregar deseo de moverse al armario de repuestos
         }
         */
-        
     }
 
 	/**
@@ -725,41 +746,60 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	 * - Once at the dirt's location, the robot cleans the dirt by removing the dirt agent from the simulation.
 	 * - After cleaning, it updates its beliefs and removes the desire and intention related to cleaning the dirt.
 	 */
-	plan move_to_clean_dirt intention: clean_dirt {
-	    predicate pred_location <- get_predicate(get_belief(new_predicate("dirt_location")));
-	    point dirt_location <- point(pred_location.values["location"]);
-	
-	    if (dirt_location != nil) {
-	        float distance <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
-	
-	        if (distance > 0.5) {
-	            float step_size <- min(2.0, distance);
-	            float direction_x <- (dirt_location.x - location.x) / distance;
-	            float direction_y <- (dirt_location.y - location.y) / distance;
-	
-	            point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
-	            do goto target: next_step;
-	
-	        } else {
-	            write "Robot llegó a la suciedad en la ubicación " + dirt_location;
-	        
-            	loop dirt_instance over: species(dirt) {
-	                if (dirt_instance.location = dirt_location) {
-	                    write "Robot limpia la suciedad en " + dirt_location;
-	                    ask dirt_instance {
-	                        do die;
-	                    }
-	                }
-                }
-                
-	            do remove_intention(clean_dirt);
-	            do remove_desire(clean_dirt);
-	        }
-	    } else {
-	        write "Error: No se encontró la ubicación de la suciedad en las creencias.";
-	    }
-	}
+	/**
+     * Plan: clean_dirt
+     * Maneja la limpieza de suciedad.
+     * - El robot se mueve hacia la suciedad más cercana en su lista de tareas pendientes.
+     * - Después de limpiar, se revisa si hay más tareas pendientes en la lista.
+     */
+    plan clean_dirt intention: clean_dirt {
+        // Obtener la primera tarea de limpieza de la lista
+        if (!empty(pending_cleaning_tasks)) {
+            point dirt_location <- pending_cleaning_tasks[0];
 
+            // Moverse hacia la suciedad
+            float distance <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
+            if (distance > 0.5) {
+                float step_size <- min(2.0, distance);
+                float direction_x <- (dirt_location.x - location.x) / distance;
+                float direction_y <- (dirt_location.y - location.y) / distance;
+
+                point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
+                do goto target: next_step;
+
+            } else {
+                write "Robot llegó a la suciedad en " + dirt_location;
+
+                // Limpiar la suciedad
+                loop dirt_instance over: species(dirt) {
+                    if (dirt_instance.location = dirt_location) {
+                        write "Robot limpia la suciedad en " + dirt_location;
+                        ask dirt_instance {
+                            do die;  // Eliminar la suciedad
+                        }
+                    }
+                }
+
+                // Eliminar la tarea completada de la lista
+                remove dirt_location from: pending_cleaning_tasks;
+
+                // Verificar si hay más tareas pendientes y agregar el deseo de limpiar la siguiente
+                if (!empty(pending_cleaning_tasks)) {
+                    do add_desire(clean_dirt);  // Continuar con la siguiente tarea
+                } else {
+                    cleaning_in_progress <- false;  // Marcar que no hay más tareas pendientes
+                }
+
+                // Limpiar la intención actual
+                do remove_intention(clean_dirt);
+            }
+        } else {
+            write "No hay más tareas de limpieza pendientes.";
+            cleaning_in_progress <- false;  // Asegurar que el estado de limpieza esté en falso
+            do remove_intention(clean_dirt);  // Eliminar la intención si no hay tareas pendientes
+        }
+    }
+	
 	/**
      * Reflex: receive_inform
      * Handles incoming inform messages from other agents.
@@ -813,25 +853,34 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	 * - If a request is found, it retrieves the location of the dirt from the message.
 	 * - The robot then creates a new desire to clean the dirt at the given location.
 	 */
+ 
+ 	/**
+     * Reflex: receive_request
+     * Maneja las solicitudes de limpieza.
+     * - Acumula las nuevas ubicaciones de suciedad en la lista `pending_cleaning_tasks`.
+     */
     reflex receive_request when: !empty(requests) {
-	    message requestMessage <- requests[0];
-	    write 'Robot recibe una solicitud de limpieza con contenido ' + requestMessage.contents;
-	
-	    pair content_pair <- requestMessage.contents[0];
-	
-	    if (content_pair.key = dirt_detected) {
-	        list conceptos_list <- content_pair.value;
-	        map conceptos_map <- map(conceptos_list);
-	        point dirt_location <- point(conceptos_map[location_concept]);
-	        
-	        if (dirt_location != nil) {
-	            do add_belief(new_predicate("dirt_location", ["location"::dirt_location]));
-	            do add_desire(clean_dirt);
-	        } else {
-	            write "Error: La ubicación de la suciedad es nula.";
-	        }
-	    }
-	}
+        message requestMessage <- requests[0];
+        pair content_pair <- requestMessage.contents[0];
+
+        if (content_pair.key = dirt_detected) {
+            list conceptos_list <- content_pair.value;
+            map conceptos_map <- map(conceptos_list);
+            point dirt_location <- point(conceptos_map[location_concept]);
+
+            // Agregar nueva suciedad a la lista de tareas pendientes
+            if (!contains(pending_cleaning_tasks, dirt_location)) {
+                add dirt_location to: pending_cleaning_tasks;
+                write "Robot recibe nueva solicitud de limpieza para la ubicación: " + dirt_location;
+            }
+
+            // Si no se está limpiando nada en este momento, iniciar la limpieza
+            if (!cleaning_in_progress) {
+                do add_desire(clean_dirt);
+                cleaning_in_progress <- true; // Marcar que la limpieza ha comenzado
+            }
+        }
+    }
 
 	/**
      * Visual aspect:

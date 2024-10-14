@@ -1,13 +1,13 @@
 
 /**
  * Name: robot_cleaning_model
- * Author: felipeguzmanrod
+ * Author: 
+ * 	- Felipe Guzmán Rodríguez
+ * 	- Pablo Díaz-Masa Valencia
  *
  * Description:
  * This model simulates an environment where cleaning robots, sensors, supply closets, 
- * and charging stations interact to maintain cleanliness. The robots perform actions 
- * such as sweeping, mopping, and collecting dirt. The supply closets provide resources, 
- * and the charging stations recharge the robots' batteries.
+ * and charging stations interact to maintain cleanliness.
  */
 
 model robot_cleaning_model
@@ -17,11 +17,13 @@ global torus: false {
 	/**
      * Environment parameters
      * - size: The grid size (100x100).
+     * - grid_shape: 
      * - cycles: Counter for simulation steps.
      * - cycles_to_pause: Number of cycles after which the simulation pauses.
      * - simulation_over: Flag to end the simulation.
      */
     int size <- 100;
+    geometry grid_shape <- rectangle(size, size);
     int cycles <- 0;
     int cycles_to_pause <- 1000;    /* se para a los 1000 ciclos */
     bool simulation_over <- false;
@@ -112,8 +114,12 @@ global torus: false {
         create species: df number: 1;
         create species: charging_station number: num_charging_stations;
         create species: supply_closet number: num_supply_closets;
-        create species: environmental_sensor number: num_sensors {
-            location <- {5, 5};
+        loop i from: 0 to: 2 {
+        	loop j from: 0 to: 3 {
+	        create species: environmental_sensor number: 1 {
+	            location <- {(16.6666 + i * 33.3333), (16.6666 + j * 33.3333)}; // Ajuste automático de la posición
+	        	}
+	        }
         }
         create species: cleaning_robot number: num_robots;
         create species: dirt number: dirt_quantity;
@@ -145,6 +151,7 @@ global torus: false {
         do die;
     }
 }
+
 
 grid my_grid width: size height: size neighbors: 8 {}
 
@@ -236,8 +243,7 @@ species charging_station skills: [fipa] control: simple_bdi {
     reflex receive_request when: !empty(requests) and !occupied {
         message requestFromRobot <- requests[0];
         write 'Estación de carga recibe una solicitud del robot con contenido ' + requestFromRobot.contents;
-        
-        // Accept the request and begin the charging process
+       
         do agree message: requestFromRobot contents: requestFromRobot.contents;
 
         occupied <- true;
@@ -284,6 +290,9 @@ species charging_station skills: [fipa] control: simple_bdi {
      */
     aspect station_aspect {
         draw geometry: square(5) color: station_color;
+        point pt <- location;
+		point pt2 <- {pt.x-2, pt.y+1};
+		draw string("EC") color: #white font:font("Roboto", 20 , #bold) at: pt2;
     }
 }
 
@@ -352,7 +361,10 @@ species supply_closet skills: [fipa] control: simple_bdi {
      * - Draws an orange square representing the supply closet on the grid.
      */
     aspect closet_aspect {
-        draw geometry: square(5) color: closet_color;
+        draw geometry: rectangle(10, 4) color: closet_color;
+        point pt <- location;
+		point pt2 <- {pt.x-2, pt.y+1};
+		draw string("AR") color: #white font:font("Roboto", 20 , #bold) at: pt2;
     }
 }
 
@@ -368,10 +380,12 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
      * Attributes:
      * - sensor_color: The color used to represent the sensor on the grid (red).
      * - sensor_detection_area_color: The color used to represent the detection area (purple).
+     * - sensor_detection_area_border_color:
      * - detection_area: The geometric area (circle) representing the sensor's detection radius.
      */
     rgb sensor_color <- rgb("red");
-    rgb sensor_detection_area_color <- rgb("#ffcfcf", 120);   /* light red with transparency*/
+    rgb sensor_detection_area_color <- rgb("#ffcfcf", 70);   /* light red with transparency*/
+    rgb sensor_detection_area_border_color <- rgb("#ff2929", 130);   /* red with transparency*/   /* light red with transparency*/
     geometry detection_area;
 
 	/**
@@ -393,7 +407,7 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
 
         location <- fixed_locations at sensor_index;
 
-        float side <- 20.0;
+        float side <- 33.33;
         detection_area <- square(side) translated_by location;
 
         ask df {
@@ -408,40 +422,50 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
      * - The sensor sets a flag to prevent repeated detection of the same dirt patch.
      */
 	reflex detect_dirt {
-		loop dirt_instance over: species(dirt) {
+	    list<agent> robots;
+	    
+	    ask df {
+	        robots <- search(Robot_role);
+	    }
+	    
+	    loop dirt_instance over: species(dirt) {
 	        point dirt_location <- dirt_instance.location;
 	        float distance_to_dirt <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
 	
-	        
 	        if (distance_to_dirt <= 5.0 and !dirt_instance.already_detected) {
-	            write "¡Suciedad detectada en " + dirt_instance.location + "! Distancia: " + distance_to_dirt;
+	            write "Suciedad detectada en " + dirt_location + " - Distancia: " + distance_to_dirt + " - Tipo: " + dirt_instance.type;
 	            dirt_instance.already_detected <- true;
 	            dirt_instance.detected_by_sensor <- self;
 	
 	            list contents;
 	            string predicado <- dirt_detected;
 	            list concept_list <- [];
+	            
 	            pair dirt_type_pair <- dirt_type::dirt_instance.type;
-	            pair location_pair <- location_concept::dirt_instance.location;
+	            pair location_pair <- location_concept::dirt_location;
 	            add dirt_type_pair to: concept_list;
 	            add location_pair to: concept_list;
+	            
 	            pair content_pair_resp <- predicado::concept_list;
 	            add content_pair_resp to: contents;
-	
-	            write "Sensor detectó suciedad de tipo " + dirt_instance.type + " en la ubicación " + dirt_instance.location;
+	            
+	            loop robot over: robots {
+	                write "Sensor enviando solicitud de limpieza al robot con ubicación: " + dirt_location;
+	                do start_conversation to: [robot] protocol: 'fipa-request' performative: 'request' contents: contents;
+	            }
 	        }
 	    }
 	}
-
+	
 	/**
      * Reflex: detect_dirt
      * Continuously monitors for dirt within the sensor's detection area.
      * - If dirt is detected within the defined radius and has not been detected before, the sensor reports it.
      * - The sensor sets a flag to prevent repeated detection of the same dirt patch.
      */
-    aspect sensor_aspect {
+      aspect sensor_aspect {
         draw geometry: circle(1) color: sensor_color at: location; // Hacer el sensor pequeño
-        draw detection_area color: sensor_detection_area_color at: location; // Dibujar el área de detección en la ubicación del sensor
+        draw detection_area color: sensor_detection_area_color border: sensor_detection_area_border_color at: location; // Dibujar el área de detección en la ubicación del sensor
     }
 }
 
@@ -501,7 +525,8 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
     predicate move_to_supply_closet <- new_predicate("move_to_supply_closet");
     predicate move_to_charging_station <- new_predicate("move_to_charging_station");
     predicate move_to_random_location <- new_predicate("move_to_random_location");
-
+    predicate clean_dirt <- new_predicate("clean_dirt");
+    
 	/**
      * Initialization:
      * - Sets the initial location and movement speed of the robot.
@@ -513,19 +538,16 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
         speed <- 10.0;
         location <- rnd(point(size, size));
 
-        // Registro en el df
         ask df {
             bool registered <- register(Robot_role, myself);
             myself.my_supply_closets <- search(SupplyCloset_role);
             myself.my_charging_stations <- search(ChargingStation_role);
         }
 
-        // Inicialización de creencias
         do add_belief(new_predicate(battery_level, ["level"::initial_battery]));
         do add_belief(new_predicate(bags_quantity, ["quantity"::initial_bags]));
         do add_belief(new_predicate(detergent_level, ["level"::initial_detergent]));
 
-        // Suponiendo que solo hay un armario de repuestos y una estación de carga
         if (!empty(my_supply_closets)) {
             do add_belief(new_predicate(my_supply_closet, ["agent"::(my_supply_closets at 0)]));
         }
@@ -533,12 +555,18 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
             do add_belief(new_predicate(my_charging_station, ["agent"::(my_charging_stations at 0)]));
         }
 
+		/**
         // Inicializar las necesidades de cada robot
         if (index = 0) {
             // El primer robot necesita cargar la batería
             do add_belief(new_predicate(battery_low_belief));
             do add_desire(move_to_charging_station);  // Agregar deseo de moverse a la estación de carga
-        } 
+        } else if (index = 1) {
+            // El segundo robot necesita detergente
+            do add_belief(new_predicate(resource_needed_belief, ["type"::"detergent"]));
+            do add_desire(move_to_supply_closet);  // Agregar deseo de moverse al armario de repuestos
+        }
+        */
         
     }
 
@@ -594,7 +622,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
             agent the_charging_station <- agent(pred_charging_station.values["agent"]);
 
             list contents;
-            pair content_pair <- recharge_action::[]; // Acción de recarga sin conceptos adicionales
+            pair content_pair <- recharge_action::[];
             add content_pair to: contents;
 
             do start_conversation to: [the_charging_station] protocol: 'fipa-request' performative: 'request' contents: contents;
@@ -688,6 +716,49 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	    do remove_intention(move_to_random_location);
 	    do remove_desire(move_to_random_location);
 	}
+   
+	/**
+	 * Plan: move_to_clean_dirt
+	 * Moves the robot to the location of the dirt to clean it.
+	 * - The robot retrieves the location of the dirt from its beliefs.
+	 * - It calculates the distance to the dirt and moves step by step towards it.
+	 * - Once at the dirt's location, the robot cleans the dirt by removing the dirt agent from the simulation.
+	 * - After cleaning, it updates its beliefs and removes the desire and intention related to cleaning the dirt.
+	 */
+	plan move_to_clean_dirt intention: clean_dirt {
+	    predicate pred_location <- get_predicate(get_belief(new_predicate("dirt_location")));
+	    point dirt_location <- point(pred_location.values["location"]);
+	
+	    if (dirt_location != nil) {
+	        float distance <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
+	
+	        if (distance > 0.5) {
+	            float step_size <- min(2.0, distance);
+	            float direction_x <- (dirt_location.x - location.x) / distance;
+	            float direction_y <- (dirt_location.y - location.y) / distance;
+	
+	            point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
+	            do goto target: next_step;
+	
+	        } else {
+	            write "Robot llegó a la suciedad en la ubicación " + dirt_location;
+	        
+            	loop dirt_instance over: species(dirt) {
+	                if (dirt_instance.location = dirt_location) {
+	                    write "Robot limpia la suciedad en " + dirt_location;
+	                    ask dirt_instance {
+	                        do die;
+	                    }
+	                }
+                }
+                
+	            do remove_intention(clean_dirt);
+	            do remove_desire(clean_dirt);
+	        }
+	    } else {
+	        write "Error: No se encontró la ubicación de la suciedad en las creencias.";
+	    }
+	}
 
 	/**
      * Reflex: receive_inform
@@ -734,6 +805,33 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
         	do add_desire(move_to_random_location);
         }
     }
+	
+	/**
+	 * Reflex: receive_request
+	 * Handles incoming cleaning requests from sensors.
+	 * - The robot checks if there are any requests in its message queue.
+	 * - If a request is found, it retrieves the location of the dirt from the message.
+	 * - The robot then creates a new desire to clean the dirt at the given location.
+	 */
+    reflex receive_request when: !empty(requests) {
+	    message requestMessage <- requests[0];
+	    write 'Robot recibe una solicitud de limpieza con contenido ' + requestMessage.contents;
+	
+	    pair content_pair <- requestMessage.contents[0];
+	
+	    if (content_pair.key = dirt_detected) {
+	        list conceptos_list <- content_pair.value;
+	        map conceptos_map <- map(conceptos_list);
+	        point dirt_location <- point(conceptos_map[location_concept]);
+	        
+	        if (dirt_location != nil) {
+	            do add_belief(new_predicate("dirt_location", ["location"::dirt_location]));
+	            do add_desire(clean_dirt);
+	        } else {
+	            write "Error: La ubicación de la suciedad es nula.";
+	        }
+	    }
+	}
 
 	/**
      * Visual aspect:
@@ -797,20 +895,20 @@ species dirt {
 
         type <- one_of(["dust", "liquid", "garbage"]);
         if (type = "dust") {
-            dirt_color <- rgb("gray");
+            dirt_color <- rgb("#a6a6a6");
         } else if (type = "liquid") {
-            dirt_color <- rgb("blue");
+            dirt_color <- rgb("#69a1ff");
         } else if (type = "garbage") {
-            dirt_color <- rgb("brown");
+            dirt_color <- rgb("#aa8222");
         }
     }
 
 	/**
      * Visual aspect:
-     * - Draws a small circle representing the dirt on the grid, with the color based on its type.
+     * - Draws a small square representing the dirt on the grid, with the color based on its type.
      */
     aspect name: dirt_aspect {
-        draw geometry: circle(2) color: dirt_color at: location;
+        draw geometry: square(5) color: dirt_color at: location;
     }
 }
 
@@ -833,4 +931,3 @@ experiment cleaning_simulation type: gui {
         }
     }
 }
-

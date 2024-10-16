@@ -17,8 +17,9 @@ global torus: false {
 	/**
      * Environment parameters
      * - size: The grid size (100x100).
-     * - grid_shape: 
+     * - grid_shape: The shape of the grid (rectangle).
      * - cycles: Counter for simulation steps.
+     * - total_cycles: Counter for the total number of cycles, not resettable.
      * - cycles_to_pause: Number of cycles after which the simulation pauses.
      * - simulation_over: Flag to end the simulation.
      */
@@ -31,20 +32,20 @@ global torus: false {
 
 	/**
      * Simulation setup parameters
-     * - num_robots: Number of cleaning robots.
-     * - num_sensors: Number of environmental sensors.
-     * - num_supply_closets: Number of supply closets.
-     * - num_charging_stations: Number of charging stations.
+     * - num_robots: Number of cleaning robots to create in the simulation.
+     * - num_sensors: Number of environmental sensors to create in the simulation.
+     * - num_supply_closets: Number of supply closets to create in the simulation.
+     * - num_charging_stations: Number of charging stations to create in the simulation.
      * - dirt_quantity: Number of dirt patches to be generated in the simulation.
      */
-    int num_robots <- 1;
+    int num_robots <- 5;
     int num_sensors <- 1;
     int num_supply_closets <- 1;
     int num_charging_stations <- 1;
     int dirt_quantity <- 1;
     
     // Variable to control dirt generation intervals
-    int dirt_generation_interval <- 80;
+    int dirt_generation_interval <- 10;
     int last_dirt_generation <- 0;
     
     /**
@@ -110,13 +111,17 @@ global torus: false {
     string dirt_type <- "Dirt_Type";
     string location_concept <- "Location";
     string resource_type <- "Resource_Type";
+    
+    
+    
+    float radius <- 15.0;
 
 	/**
      * Initial setup: Creating the agents in the environment
      * - Creates 1 Directory Facilitator (df), charging stations, supply closets, sensors, robots, and dirt patches.
      */
-	    init {
-	    create species: df number: 1;
+	 init {
+	 	create species: df number: 1;
 	    create species: charging_station number: num_charging_stations;
 	    create species: supply_closet number: num_supply_closets;
 	
@@ -133,14 +138,19 @@ global torus: false {
 	    create species: dirt number: dirt_quantity;
 	}
     
-
-	// Reflex para contar tanto ciclos locales como totales
+    /**
+     * Reflex: counting
+     * Increments the local and total cycle counters at each simulation step.
+     */
     reflex counting {
         cycles <- cycles + 1;
-        total_cycles <- total_cycles + 1;  // Sigue aumentando indefinidamente.
+        total_cycles <- total_cycles + 1;
     }
     
-	// Reflex para generar suciedad
+    /**
+     * Reflex: generate_dirt
+     * Generates a new dirt patch after a defined interval of total cycles.
+     */
     reflex generate_dirt {
         if (total_cycles - last_dirt_generation >= dirt_generation_interval) {
             last_dirt_generation <- total_cycles;
@@ -149,9 +159,12 @@ global torus: false {
         }
     }
 
-    // Reflex para pausar la simulación después de ciclos específicos.
+	/**
+     * Reflex: pausing
+     * Pauses the simulation after a specific number of cycles.
+     */
     reflex pausing when: cycles = cycles_to_pause {
-        cycles <- 0;  // Reinicia solo el contador local, pero total_cycles sigue acumulándose.
+        cycles <- 0;
         write "Simulación pausada tras " + cycles_to_pause;
         do pause;
     }
@@ -399,7 +412,7 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
     rgb sensor_color <- rgb("red");
     rgb sensor_detection_area_color <- rgb("#ffcfcf", 70);   /* light red with transparency */
     rgb sensor_detection_area_border_color <- rgb("#ff2929", 130);   /* red with transparency */
-    float detection_area_radius <- 10.0;  // Definir el radio de detección del sensor
+    //float detection_area_radius <- 24.0;  // Definir el radio de detección del sensor
 
     /**
      * Initialization:
@@ -419,45 +432,43 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
      * - If dirt is detected within the defined radius and has not been detected before, the sensor reports it.
      * - The sensor sets a flag to prevent repeated detection of the same dirt patch.
      */
-    reflex detect_dirt {
-        list<agent> robots;
-        
-        ask df {
-            robots <- search(Robot_role);
-        }
-        
-        loop dirt_instance over: species(dirt) {
-            point dirt_location <- dirt_instance.location;
-            
-            // Comprobar si la suciedad está dentro del radio de detección mediante cálculo de distancia
-            float distance_to_dirt <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
-
-            if (distance_to_dirt <= detection_area_radius and !dirt_instance.already_detected) {
-                write "Suciedad detectada en " + dirt_location + " - Distancia: " + distance_to_dirt + " - Tipo: " + dirt_instance.type;
-                dirt_instance.already_detected <- true;
-                dirt_instance.detected_by_sensor <- self;
-
-                list contents;
-                string predicado <- dirt_detected;
-                list concept_list <- [];
-                
-                pair dirt_type_pair <- dirt_type::dirt_instance.type;
-                pair location_pair <- location_concept::dirt_location;
-                add dirt_type_pair to: concept_list;
-                add location_pair to: concept_list;
-                
-                pair content_pair_resp <- predicado::concept_list;
-                add content_pair_resp to: contents;
-                
-                // Enviar solicitud de limpieza a los robots
-                loop robot over: robots {
-                    write "Sensor enviando solicitud de limpieza al robot con ubicación: " + dirt_location;
-                    do start_conversation to: [robot] protocol: 'fipa-request' performative: 'request' contents: contents;
-                }
-            }
-        }
-    }
-
+	reflex detect_dirt {
+	    loop dirt_instance over: species(dirt) {
+	        point dirt_location <- dirt_instance.location;
+	
+	        float distance_to_dirt <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
+	
+	        if (distance_to_dirt <= radius and !dirt_instance.already_detected) {
+	            write "Suciedad detectada en " + dirt_location + " - Distancia: " + distance_to_dirt + " - Tipo: " + dirt_instance.type;
+	            dirt_instance.already_detected <- true;
+	            dirt_instance.detected_by_sensor <- self;
+	
+	            list contents;
+	            string predicado <- dirt_detected;
+	            list concept_list <- [];
+	
+	            pair dirt_type_pair <- dirt_type::dirt_instance.type;
+	            pair location_pair <- location_concept::dirt_location;
+	            add dirt_type_pair to: concept_list;
+	            add location_pair to: concept_list;
+	
+	            pair content_pair_resp <- predicado::concept_list;
+	            add content_pair_resp to: contents;
+	
+	            if (!dirt_instance.assigned_to_robot) {
+	                loop robot over: species(cleaning_robot) {
+	                    if (!robot.cleaning_in_progress) {
+	                        write "Sensor enviando solicitud de limpieza al robot con ubicación: " + dirt_location;
+	                        do start_conversation to: [robot] protocol: 'fipa-request' performative: 'request' contents: contents;
+	                        dirt_instance.assigned_to_robot <- true; 
+	                        break;
+	                    }
+	                }
+	            }
+	        }
+	    }
+	}
+	
 	/**
      * Visual aspect:
      * - Draws a small red circle representing the sensor on the grid.
@@ -465,10 +476,9 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
      */
     aspect sensor_aspect {
         draw geometry: circle(1) color: sensor_color at: location; // Representar el sensor pequeño
-        draw circle(detection_area_radius) color: sensor_detection_area_color border: sensor_detection_area_border_color at: location; // Dibujar el área de detección circular
+        draw circle(radius) color: sensor_detection_area_color border: sensor_detection_area_border_color at: location; // Dibujar el área de detección circular
     }
 }
-
 
 /**
  * Species: cleaning_robot
@@ -491,6 +501,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
     list<agent> my_supply_closets;
     list<agent> my_charging_stations;
     list<point> pending_cleaning_tasks <- [];
+    list<point> assigned_dirt_locations <- []; // Nueva lista para rastrear suciedades asignadas
     bool cleaning_in_progress <- false;
 
 	/**
@@ -718,68 +729,48 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	    do remove_intention(move_to_random_location);
 	    do remove_desire(move_to_random_location);
 	}
-   
-	/**
-	 * Plan: move_to_clean_dirt
-	 * Moves the robot to the location of the dirt to clean it.
-	 * - The robot retrieves the location of the dirt from its beliefs.
-	 * - It calculates the distance to the dirt and moves step by step towards it.
-	 * - Once at the dirt's location, the robot cleans the dirt by removing the dirt agent from the simulation.
-	 * - After cleaning, it updates its beliefs and removes the desire and intention related to cleaning the dirt.
-	 */
+
 	/**
      * Plan: clean_dirt
-     * Maneja la limpieza de suciedad.
-     * - El robot se mueve hacia la suciedad más cercana en su lista de tareas pendientes.
-     * - Después de limpiar, se revisa si hay más tareas pendientes en la lista.
+     * Cleans dirt at assigned locations.
+     * - Moves the robot to the dirt location and removes the dirt patch.
      */
-    plan clean_dirt intention: clean_dirt {
-        // Obtener la primera tarea de limpieza de la lista
-        if (!empty(pending_cleaning_tasks)) {
-            point dirt_location <- pending_cleaning_tasks[0];
-
-            // Moverse hacia la suciedad
-            float distance <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
-            if (distance > 0.5) {
-                float step_size <- min(2.0, distance);
-                float direction_x <- (dirt_location.x - location.x) / distance;
-                float direction_y <- (dirt_location.y - location.y) / distance;
-
-                point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
-                do goto target: next_step;
-
-            } else {
-                write "Robot llegó a la suciedad en " + dirt_location;
-
-                // Limpiar la suciedad
-                loop dirt_instance over: species(dirt) {
-                    if (dirt_instance.location = dirt_location) {
-                        write "Robot limpia la suciedad en " + dirt_location;
-                        ask dirt_instance {
-                            do die;  // Eliminar la suciedad
-                        }
-                    }
-                }
-
-                // Eliminar la tarea completada de la lista
-                remove dirt_location from: pending_cleaning_tasks;
-
-                // Verificar si hay más tareas pendientes y agregar el deseo de limpiar la siguiente
-                if (!empty(pending_cleaning_tasks)) {
-                    do add_desire(clean_dirt);  // Continuar con la siguiente tarea
-                } else {
-                    cleaning_in_progress <- false;  // Marcar que no hay más tareas pendientes
-                }
-
-                // Limpiar la intención actual
-                do remove_intention(clean_dirt);
-            }
-        } else {
-            write "No hay más tareas de limpieza pendientes.";
-            cleaning_in_progress <- false;  // Asegurar que el estado de limpieza esté en falso
-            do remove_intention(clean_dirt);  // Eliminar la intención si no hay tareas pendientes
-        }
-    }
+	plan clean_dirt intention: clean_dirt {
+	    if (!empty(pending_cleaning_tasks)) {
+	        point dirt_location <- pending_cleaning_tasks[0];
+	
+	        float distance <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
+	        
+	        if (distance > 0.5) {
+	            float step_size <- min(2.0, distance);
+	            float direction_x <- (dirt_location.x - location.x) / distance;
+	            float direction_y <- (dirt_location.y - location.y) / distance;
+	
+	            point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
+	            do goto target: next_step;
+	
+	        } else {
+	            write "Robot llegó a la suciedad en " + dirt_location;
+	            loop dirt_instance over: species(dirt) {
+	                if (dirt_instance.location = dirt_location) {
+	                    write "Robot limpia la suciedad en " + dirt_location;
+	                    ask dirt_instance {
+	                        do die;
+	                    }
+	                }
+	            }
+	
+	            remove dirt_location from: pending_cleaning_tasks;
+	
+	            do remove_intention(clean_dirt);
+	            cleaning_in_progress <- false;
+	        }
+	    } else {
+	        write "No hay más tareas de limpieza pendientes.";
+	        cleaning_in_progress <- false;
+	        do remove_intention(clean_dirt);
+	    }
+	}
 	
 	/**
      * Reflex: receive_inform
@@ -828,40 +819,36 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
     }
 	
 	/**
-	 * Reflex: receive_request
-	 * Handles incoming cleaning requests from sensors.
-	 * - The robot checks if there are any requests in its message queue.
-	 * - If a request is found, it retrieves the location of the dirt from the message.
-	 * - The robot then creates a new desire to clean the dirt at the given location.
-	 */
- 
- 	/**
      * Reflex: receive_request
-     * Maneja las solicitudes de limpieza.
-     * - Acumula las nuevas ubicaciones de suciedad en la lista `pending_cleaning_tasks`.
+     * Handles incoming requests for cleaning tasks.
+     * - Checks if the dirt has been assigned to this robot before proceeding.
+     * - If not assigned, adds the task to pending tasks and allows the robot to clean if not busy.
      */
-    reflex receive_request when: !empty(requests) {
-        message requestMessage <- requests[0];
-        pair content_pair <- requestMessage.contents[0];
-
-        if (content_pair.key = dirt_detected) {
-            list conceptos_list <- content_pair.value;
-            map conceptos_map <- map(conceptos_list);
-            point dirt_location <- point(conceptos_map[location_concept]);
-
-            // Agregar nueva suciedad a la lista de tareas pendientes
-            if (!contains(pending_cleaning_tasks, dirt_location)) {
-                add dirt_location to: pending_cleaning_tasks;
-                write "Robot recibe nueva solicitud de limpieza para la ubicación: " + dirt_location;
-            }
-
-            // Si no se está limpiando nada en este momento, iniciar la limpieza
-            if (!cleaning_in_progress) {
-                do add_desire(clean_dirt);
-                cleaning_in_progress <- true; // Marcar que la limpieza ha comenzado
-            }
-        }
-    }
+	reflex receive_request when: !empty(requests) {
+	    message requestMessage <- requests[0];
+	    pair content_pair <- requestMessage.contents[0];
+	
+	    if (content_pair.key = dirt_detected) {
+	        list conceptos_list <- content_pair.value;
+	        map conceptos_map <- map(conceptos_list);
+	        point dirt_location <- point(conceptos_map[location_concept]);
+	
+	        loop dirt_instance over: species(dirt) {
+	            if (dirt_instance.location = dirt_location) {
+	                if (dirt_instance.assigned_to_robot) {
+	                    add dirt_location to: pending_cleaning_tasks;
+	                    dirt_instance.assigned_to_robot <- true;
+	                    write "Robot recibe nueva solicitud de limpieza para la ubicación: " + dirt_location;
+	
+	                    if (!cleaning_in_progress) {
+	                        cleaning_in_progress <- true;
+	                        do add_desire(clean_dirt);
+	                    }
+	                }
+	            }
+	        }
+	    }
+	}
 
 	/**
      * Visual aspect:
@@ -891,7 +878,8 @@ species dirt {
     bool already_detected <- false;
     rgb dirt_color;
     agent detected_by_sensor <- nil;
-
+	bool assigned_to_robot <- false; // Nueva variable para verificar si la suciedad ha sido asignada
+	
     /**
      * Initialization:
      * - Registers the dirt in the DF under the role "Dirt".
@@ -905,46 +893,35 @@ species dirt {
             bool registered <- register(Dirt_role, myself);
         }
 
-        // Obtener la lista de sensores registrados en el DF
         ask df {
             sensors <- search(Sensor_role);
         }
 
         if (!empty(sensors)) {
-            // Seleccionar aleatoriamente un sensor
             agent sensor_agent <- one_of(sensors);
             point sensor_location <- sensor_agent.location;
-
-            // Usar el radio de detección definido en el sensor
-            float radius <- 10.0;
-
-            // Inicializar una variable para almacenar la nueva posición
             point new_position <- nil;
 
-            // Generar una posición dentro del área de detección circular del sensor
             loop while: new_position = nil {
-                float angle <- rnd(0.0, 2 * #pi); // Generar un ángulo aleatorio
-                float distance <- rnd(0.0, radius); // Generar una distancia aleatoria dentro del radio
-                float x_offset <- cos(angle) * distance; // Calcular desplazamiento en X
-                float y_offset <- sin(angle) * distance; // Calcular desplazamiento en Y
+                float angle <- rnd(0.0, 2 * #pi);
+                float distance <- rnd(0.0, radius);
+                
+                float x_offset <- cos(angle) * distance;
+                float y_offset <- sin(angle) * distance;
 
-                // Calcular la nueva ubicación de la suciedad
                 float new_x <- sensor_location.x + x_offset;
                 float new_y <- sensor_location.y + y_offset;
 
-                // Verificar que la posición esté dentro del radio de detección del sensor
                 float distancia_a_sensor <- sqrt((new_x - sensor_location.x) ^ 2 + (new_y - sensor_location.y) ^ 2);
 
-                // Si la distancia está dentro del radio, asignar la posición
                 if (distancia_a_sensor <= radius) {
                     new_position <- {new_x, new_y};
                 }
             }
 
-            location <- new_position;  // Asignar la ubicación final
+            location <- new_position;
         }
 
-        // Asignar tipo y color a la suciedad
         type <- one_of(["dust", "liquid", "garbage"]);
         if (type = "dust") {
             dirt_color <- rgb("#a6a6a6");
@@ -963,10 +940,6 @@ species dirt {
         draw geometry: square(5) color: dirt_color at: location;
     }
 }
-
-
-
-
 
 /**
  * Experiment: cleaning_simulation

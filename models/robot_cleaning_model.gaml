@@ -16,27 +16,26 @@ global torus: false {
 	
 	/**
      * Environment parameters
-     * - size: The grid size (100x100).
-     * - grid_shape: The shape of the grid (rectangle).
-     * - cycles: Counter for simulation steps.
-     * - total_cycles: Counter for the total number of cycles, not resettable.
-     * - cycles_to_pause: Number of cycles after which the simulation pauses.
-     * - simulation_over: Flag to end the simulation.
+     * - size: Grid size (100x100).
+     * - cycles: Simulation step counter.
+     * - total_cycles: Total step counter (does not reset).
+     * - cycles_to_pause: Cycles before pausing the simulation.
+     * - simulation_over: Ends the simulation.
      */
     float size <- 100.0;
     geometry grid_shape <- rectangle(size, size);
-    int cycles <- 0;  // Este ciclo puede reiniciarse después de pausar.
-    int total_cycles <- 0;  // Este ciclo nunca se reinicia y sigue contando indefinidamente.
-    int cycles_to_pause <- 1000;  // Pausar después de 1000 ciclos.
+    int cycles <- 0;
+    int total_cycles <- 0;
+    int cycles_to_pause <- 1000;
     bool simulation_over <- false;
 
 	/**
-     * Simulation setup parameters
-     * - num_robots: Number of cleaning robots to create in the simulation.
-     * - num_sensors: Number of environmental sensors to create in the simulation.
-     * - num_supply_closets: Number of supply closets to create in the simulation.
-     * - num_charging_stations: Number of charging stations to create in the simulation.
-     * - dirt_quantity: Number of dirt patches to be generated in the simulation.
+     * Simulation setup
+     * - num_robots: Number of robots.
+     * - num_sensors: Number of sensors.
+     * - num_supply_closets: Number of supply closets.
+     * - num_charging_stations: Number of charging stations.
+     * - dirt_quantity: Number of dirt patches.
      */
     int num_robots <- 5;
     int num_sensors <- 1;
@@ -44,29 +43,35 @@ global torus: false {
     int num_charging_stations <- 1;
     int dirt_quantity <- 1;
     
-    // Variable to control dirt generation intervals
-    int dirt_generation_interval <- 10;
+    // Dirt generation control
+    int dirt_generation_interval <- 80;
     int last_dirt_generation <- 0;
     
     /**
-     * Robot-specific attributes
-     * - initial_battery: The starting battery level of the robots.
-     * - battery_threshold: Minimum battery level before recharging is required.
-     * - initial_bags: Initial number of trash bags the robot carries.
-     * - initial_detergent: Initial amount of detergent carried by the robot.
+     * Robot-specific settings
+     * - initial_battery: Starting battery level.
+     * - battery_threshold: Minimum battery level to recharge.
+     * - initial_bags: Starting number of trash bags.
+     * - initial_detergent: Initial detergent amount.
      */
     int initial_battery <- 100;
     int battery_threshold <- 20;
     int initial_bags <- 1;
     int initial_detergent <- 100;
+    
+    /**
+     * Sensor detection radius
+     * - radius: Detection range of sensors.
+     */
+    float radius <- 15.0;
 
     /**
-     * Role names for communication and registration in the Directory Facilitator (DF)
-     * - Robot_role: Role name for the robots.
-     * - Sensor_role: Role name for the sensors.
-     * - ChargingStation_role: Role name for the charging stations.
-     * - SupplyCloset_role: Role name for the supply closets.
-     * - Dirt_role: Role name for dirt patches.
+     * Role names for DF registration
+     * - Robot_role: Role for robots.
+     * - Sensor_role: Role for sensors.
+     * - ChargingStation_role: Role for charging stations.
+     * - SupplyCloset_role: Role for supply closets.
+     * - Dirt_role: Role for dirt patches.
      */
     string Robot_role <- "Robot";
     string Sensor_role <- "Sensor";
@@ -75,12 +80,12 @@ global torus: false {
     string Dirt_role <- "Dirt";
 
 	/**
-     * Actions used in communication between agents
-     * - sweep_action: Action for the robot to sweep.
-     * - mop_action: Action for the robot to mop.
-     * - collect_action: Action for the robot to collect dirt.
-     * - recharge_action: Action to request battery recharging.
-     * - supply_resource_action: Action for supplying resources to the robot.
+     * Communication actions
+     * - sweep_action: Robot sweeps.
+     * - mop_action: Robot mops.
+     * - collect_action: Robot collects dirt.
+     * - recharge_action: Request battery recharge.
+     * - supply_resource_action: Request resources.
      */
     string sweep_action <- "Sweep";
     string mop_action <- "Mop";
@@ -89,47 +94,40 @@ global torus: false {
     string supply_resource_action <- "Supply_Resource";
 	
 	/**
-     * Predicates used in communication messages between agents
-     * - dirt_detected: Predicate to indicate dirt has been detected.
-     * - resource_needed: Predicate to indicate a resource is needed.
-     * - resource_provided: Predicate to indicate a resource has been provided.
-     * - resource_not_available: Predicate to indicate a resource is not available.
-     * - battery_low: Predicate to indicate the robot's battery is low.
+     * Communication predicates
+     * - dirt_detected: Dirt detected.
+     * - resource_needed: Resource needed.
+     * - resource_provided: Resource provided.
+     * - battery_low: Low battery.
      */
     string dirt_detected <- "Dirt_Detected";
     string resource_needed <- "Resource_Needed";
     string resource_provided <- "Resource_Provided";
-    string resource_not_available <- "Resource_Not_Available";
     string battery_low <- "Battery_Low";
 
 	/**
-     * Message concept names used in communication
-     * - dirt_type: Concept representing the type of dirt.
-     * - location_concept: Concept representing a location in the environment.
-     * - resource_type: Concept representing the type of resource.
+     * Message concepts
+     * - dirt_type: Type of dirt.
+     * - location_concept: Location of dirt.
+     * - resource_type: Type of resource.
      */
     string dirt_type <- "Dirt_Type";
     string location_concept <- "Location";
     string resource_type <- "Resource_Type";
-    
-    
-    
-    float radius <- 15.0;
-
+  
 	/**
-     * Initial setup: Creating the agents in the environment
-     * - Creates 1 Directory Facilitator (df), charging stations, supply closets, sensors, robots, and dirt patches.
+     * Initial setup: Creates agents in the environment
+     * - df, charging stations, supply closets, sensors, robots, and dirt patches.
      */
 	 init {
 	 	create species: df number: 1;
 	    create species: charging_station number: num_charging_stations;
 	    create species: supply_closet number: num_supply_closets;
-	
-	    // Generar una cuadrícula de 3x3 sensores
+
 	    loop i from: 0 to: 2 {
 	        loop j from: 0 to: 2 {
 	            create species: environmental_sensor number: 1 {
-	                location <- {(size / 3) * (i + 0.5), (size / 3) * (j + 0.5)}; // Posiciones ajustadas para 3x3
+	                location <- {(size / 3) * (i + 0.5), (size / 3) * (j + 0.5)};
 	            }
 	        }
 	    }
@@ -140,7 +138,7 @@ global torus: false {
     
     /**
      * Reflex: counting
-     * Increments the local and total cycle counters at each simulation step.
+     * Increments cycle counters every step.
      */
     reflex counting {
         cycles <- cycles + 1;
@@ -149,19 +147,18 @@ global torus: false {
     
     /**
      * Reflex: generate_dirt
-     * Generates a new dirt patch after a defined interval of total cycles.
+     * Creates dirt every specified number of cycles.
      */
     reflex generate_dirt {
         if (total_cycles - last_dirt_generation >= dirt_generation_interval) {
             last_dirt_generation <- total_cycles;
             create species: dirt number: 1;
-            write "New dirt generated at cycle: " + total_cycles;
         }
     }
 
 	/**
      * Reflex: pausing
-     * Pauses the simulation after a specific number of cycles.
+     * Pauses the simulation after a set number of cycles.
      */
     reflex pausing when: cycles = cycles_to_pause {
         cycles <- 0;
@@ -170,7 +167,8 @@ global torus: false {
     }
 
 	/**
-     * Reflex to stop the simulation when the simulation_over flag is set to true.
+     * Reflex: halting
+     * Stops the simulation when the flag is set.
      */
     reflex halting when: simulation_over {
         write "Finalizando simulación";
@@ -178,30 +176,27 @@ global torus: false {
     }
 }
 
-
 grid my_grid width: size height: size neighbors: 8 {}
 
 /**
  * Species: df (Directory Facilitator)
- * Description:
- * Acts as a directory facilitator for registering and searching agents with specific roles.
- * Maintains a list of agents and their associated roles.
+ * Manages agent registration and role-based search.
  */
 species df {
-	
-	/**
+
+    /**
      * Attributes:
-     * - yellow_pages: List of pairs where each pair contains a role and an agent.
+     * - yellow_pages: List of role-agent pairs.
      */
     list<pair> yellow_pages <- [];
     
     /**
      * Method: register
-     * Registers an agent with a specific role in the yellow pages.
+     * Registers an agent with a specific role.
      * 
-     * @param the_role: The role to register the agent under.
-     * @param the_agent: The agent to register.
-     * @return registered: Boolean indicating whether the registration was successful.
+     * @param the_role: Role for the agent.
+     * @param the_agent: Agent to register.
+     * @return registered: Boolean indicating success.
      */
     bool register(string the_role, agent the_agent) {
         bool registered;
@@ -211,10 +206,10 @@ species df {
     
     /**
      * Method: search
-     * Searches for agents registered under a specific role.
+     * Finds agents registered with a specific role.
      * 
-     * @param the_role: The role to search for.
-     * @return found_ones: A list of agents registered under the given role.
+     * @param the_role: Role to search for.
+     * @return found_ones: List of agents with the role.
      */
     list<agent> search(string the_role) {
         list<agent> found_ones <- [];
@@ -229,33 +224,28 @@ species df {
 
 /**
  * Species: charging_station
- * Description:
- * Represents a charging station where robots can recharge their batteries.
- * The charging station manages charging requests and informs robots when their batteries are fully recharged.
+ * Manages robot battery recharging requests.
  */
 species charging_station skills: [fipa] control: simple_bdi {
 	
 	/**
      * Attributes:
-     * - station_color: Color used to represent the charging station on the grid (green).
-     * - occupied: Boolean indicating whether the station is currently charging a robot.
-     * - current_cycle: Counter for the number of cycles remaining to complete charging.
-     * - charging_time: Number of cycles required to fully charge a robot.
-     * - charging_robot_request: The request message from the robot currently being charged.
+     * - occupied: Indicates if a robot is being charged.
+     * - current_cycle: Cycles left for charging.
+     * - charging_time: Total cycles needed for a full charge.
+     * - charging_robot_request: Current robot's request being processed.
      */
-    rgb station_color <- rgb("green");
     bool occupied <- false; 
     int current_cycle <- 0;
     int charging_time <- 10;
     message charging_robot_request <- nil;
     
     /**
-     * Initialization:
-     * - Sets the charging station's location.
-     * - Registers the charging station in the DF under the role "ChargingStation".
+     * Initialization: Sets the location and registers in the DF.
      */
     init {
         location <- {size / 2 - 5, 5};
+        
         ask df {
             bool registered <- register(ChargingStation_role, myself);
         }
@@ -263,8 +253,7 @@ species charging_station skills: [fipa] control: simple_bdi {
     
     /**
      * Reflex: receive_request
-     * Handles incoming charging requests from robots.
-     * - If the station is not occupied, it processes the request and begins charging the robot.
+     * Starts charging if the station is free.
      */
     reflex receive_request when: !empty(requests) and !occupied {
         message requestFromRobot <- requests[0];
@@ -281,9 +270,7 @@ species charging_station skills: [fipa] control: simple_bdi {
 
 	/**
      * Reflex: charging_progress
-     * Manages the charging progress for the robot.
-     * - Decreases the charging time cycle by cycle.
-     * - Once charging is complete, it informs the robot and resets the station's state.
+     * Handles the charging process cycle by cycle and informs when done.
      */
     reflex charging_progress when: occupied {
         current_cycle <- current_cycle - 1; 
@@ -311,11 +298,10 @@ species charging_station skills: [fipa] control: simple_bdi {
     }
 
 	/**
-     * Visual aspect:
-     * - Draws a green square representing the charging station.
+     * Visual aspect: Green square for the charging station.
      */
     aspect station_aspect {
-        draw geometry: square(5) color: station_color;
+        draw geometry: square(5) color: rgb("green");
         point pt <- location;
 		point pt2 <- {pt.x-2, pt.y+1};
 		draw string("EC") color: #white font:font("Roboto", 20 , #bold) at: pt2;
@@ -324,22 +310,12 @@ species charging_station skills: [fipa] control: simple_bdi {
 
 /**
  * Species: supply_closet
- * Description:
- * Represents a supply closet that provides resources such as detergent or trash bags to robots upon request.
- * The closet handles incoming resource requests and sends the appropriate resources back to the requesting robot.
+ * Provides resources (detergent, trash bags) to robots upon request.
  */
 species supply_closet skills: [fipa] control: simple_bdi {
-    
-    /**
-     * Attributes:
-     * - closet_color: Color used to represent the supply closet on the grid (orange).
-     */
-    rgb closet_color <- rgb("orange");
 
 	/**
-     * Initialization:
-     * - Sets the supply closet's location on the grid.
-     * - Registers the supply closet in the DF under the role "SupplyCloset".
+     * Initialization: Sets location and registers in the DF.
      */
     init {
         location <- {size / 2 + 5, 5};
@@ -350,8 +326,7 @@ species supply_closet skills: [fipa] control: simple_bdi {
     
     /**
      * Reflex: receive_request
-     * Handles incoming resource requests from robots.
-     * - Processes the request and responds with the requested resource (e.g., detergent, trash bags).
+     * Processes resource requests from robots.
      */
     reflex receive_request when: !empty(requests) {
         message requestFromRobot <- requests[0];
@@ -383,11 +358,10 @@ species supply_closet skills: [fipa] control: simple_bdi {
     }
 
 	/**
-     * Visual aspect:
-     * - Draws an orange square representing the supply closet on the grid.
+     * Visual aspect: Orange rectangle representing the supply closet.
      */
     aspect closet_aspect {
-        draw geometry: rectangle(10, 4) color: closet_color;
+        draw geometry: rectangle(10, 4) color: rgb("orange");
         point pt <- location;
 		point pt2 <- {pt.x-2, pt.y+1};
 		draw string("AR") color: #white font:font("Roboto", 20 , #bold) at: pt2;
@@ -396,31 +370,14 @@ species supply_closet skills: [fipa] control: simple_bdi {
 
 /**
  * Species: environmental_sensor
- * Description:
- * Represents an environmental sensor that detects dirt within a certain radius.
- * Sensors report the detection of dirt to the robots for cleaning actions.
+ * Detects dirt within a radius and sends cleaning requests to robots.
  */
 species environmental_sensor skills: [fipa] control: simple_bdi {
     
     /**
-     * Attributes:
-     * - sensor_color: The color used to represent the sensor on the grid (red).
-     * - sensor_detection_area_color: The color used to represent the detection area (purple).
-     * - sensor_detection_area_border_color: The border color for the detection area.
-     * - detection_area_radius: The radius of the sensor's detection area.
-     */
-    rgb sensor_color <- rgb("red");
-    rgb sensor_detection_area_color <- rgb("#ffcfcf", 70);   /* light red with transparency */
-    rgb sensor_detection_area_border_color <- rgb("#ff2929", 130);   /* red with transparency */
-    //float detection_area_radius <- 24.0;  // Definir el radio de detección del sensor
-
-    /**
-     * Initialization:
-     * - Sets the location of the sensor based on predefined fixed points on the grid (corners and center).
-     * - Registers the sensor in the DF under the role "Sensor".
+     * Initialization: Registers the sensor in the DF.
      */
     init {
-        
         ask df {
             bool registered <- register(Sensor_role, myself);
         }
@@ -428,9 +385,7 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
 
 	/**
      * Reflex: detect_dirt
-     * Continuously monitors for dirt within the sensor's detection area.
-     * - If dirt is detected within the defined radius and has not been detected before, the sensor reports it.
-     * - The sensor sets a flag to prevent repeated detection of the same dirt patch.
+     * Detects dirt within the sensor's radius and assigns it to a robot.
      */
 	reflex detect_dirt {
 	    loop dirt_instance over: species(dirt) {
@@ -470,51 +425,37 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
 	}
 	
 	/**
-     * Visual aspect:
-     * - Draws a small red circle representing the sensor on the grid.
-     * - Also draws the detection area around the sensor.
+     * Visual aspect: Red circle for the sensor and its detection radius.
      */
     aspect sensor_aspect {
-        draw geometry: circle(1) color: sensor_color at: location; // Representar el sensor pequeño
-        draw circle(radius) color: sensor_detection_area_color border: sensor_detection_area_border_color at: location; // Dibujar el área de detección circular
+        draw geometry: circle(1) color: rgb("red") at: location; // Representar el sensor pequeño
+        draw circle(radius) color: rgb("#ffcfcf", 70) border: rgb("#ff2929", 130) at: location; // Dibujar el área de detección circular
     }
 }
 
 /**
  * Species: cleaning_robot
- * Description:
- * Represents a cleaning robot that can perform actions like sweeping, mopping, and collecting dirt.
- * The robot can also request resources from the supply closet and recharge its battery at a charging station.
+ * Manages movement, requests resources, and cleans dirt.
  */
 species cleaning_robot skills: [moving, fipa] control: simple_bdi {
    
    /**
      * Attributes:
-     * - robot_color: The color used to represent the robot on the grid (purple).
-     * - perceived: Boolean flag indicating whether the robot has perceived something.
-     * - speed: The movement speed of the robot.
-     * - my_supply_closets: A list of available supply closet agents (found from the DF).
-     * - my_charging_stations: A list of available charging station agents (found from the DF).
+     * - my_supply_closets: Available supply closets.
+     * - my_charging_stations: Available charging stations.
+     * - pending_cleaning_tasks: List of pending cleaning tasks.
+     * - assigned_dirt_locations: Dirt locations assigned to this robot.
+     * - cleaning_in_progress: Indicates if the robot is currently cleaning.
      */
-    rgb robot_color <- rgb("purple");
-    bool perceived <- false;
     list<agent> my_supply_closets;
     list<agent> my_charging_stations;
     list<point> pending_cleaning_tasks <- [];
-    list<point> assigned_dirt_locations <- []; // Nueva lista para rastrear suciedades asignadas
+    list<point> assigned_dirt_locations <- [];
     bool cleaning_in_progress <- false;
 
 	/**
-     * Belief-related attributes:
-     * - at_supply_closet: Predicate indicating the robot is at the supply closet.
-     * - at_charging_station: Predicate indicating the robot is at the charging station.
-     * - resource_needed_belief: Predicate representing the robot's need for a resource (e.g., detergent, trash bags).
-     * - battery_low_belief: Predicate representing the robot's belief that its battery is low.
-     * - my_supply_closet: Stores the robot's assigned supply closet agent.
-     * - my_charging_station: Stores the robot's assigned charging station agent.
-     * - battery_level: Stores the robot's current battery level.
-     * - bags_quantity: Stores the number of trash bags the robot currently has.
-     * - detergent_level: Stores the amount of detergent the robot currently has.
+     * Belief attributes
+     * - Stores beliefs about location, battery, resources, and assigned agents.
      */
     string at_supply_closet <- "at_supply_closet";
     string at_charging_station <- "at_charging_station";
@@ -527,12 +468,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
     string detergent_level <- "detergent_level";
 
 	/**
-     * Predicates for actions the robot performs:
-     * - request_resource: Predicate representing the robot's desire to request resources from the supply closet.
-     * - request_charge: Predicate representing the robot's desire to request battery recharging at the charging station.
-     * - move_to_supply_closet: Predicate representing the robot's desire to move to the supply closet.
-     * - move_to_charging_station: Predicate representing the robot's desire to move to the charging station.
-     * - move_to_random_location: Predicate representing the robot's desire to move to a random location.
+     * Predicates: Actions and desires for resource requests and movement.
      */
     predicate request_resource <- new_predicate("request_resource");
     predicate request_charge <- new_predicate("request_charge");
@@ -542,11 +478,8 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
     predicate clean_dirt <- new_predicate("clean_dirt");
     
 	/**
-     * Initialization:
-     * - Sets the initial location and movement speed of the robot.
-     * - Registers the robot in the DF under the role "Robot".
-     * - Searches for supply closets and charging stations in the DF and assigns one of each to the robot.
-     * - Initializes the robot's beliefs (battery level, bags quantity, detergent level).
+     * Initialization: Sets location, speed, and registers robot in the DF.
+     * Also initializes the robot's beliefs (battery, resources).
      */
     init {
         speed <- 10.0;
@@ -568,19 +501,6 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
         if (!empty(my_charging_stations)) {
             do add_belief(new_predicate(my_charging_station, ["agent"::(my_charging_stations at 0)]));
         }
-
-		/**
-        // Inicializar las necesidades de cada robot
-        if (index = 0) {
-            // El primer robot necesita cargar la batería
-            do add_belief(new_predicate(battery_low_belief));
-            do add_desire(move_to_charging_station);  // Agregar deseo de moverse a la estación de carga
-        } else if (index = 1) {
-            // El segundo robot necesita detergente
-            do add_belief(new_predicate(resource_needed_belief, ["type"::"detergent"]));
-            do add_desire(move_to_supply_closet);  // Agregar deseo de moverse al armario de repuestos
-        }
-        */
     }
 
 	/**
@@ -595,8 +515,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 
 	/**
      * Plan: request_resource
-     * Handles the robot's request for resources from the supply closet.
-     * - If the robot is at the supply closet, it requests the necessary resources (e.g., detergent or trash bags).
+     * Handles requests for resources (detergent or bags) if at the supply closet.
      */
     plan request_resource intention: request_resource {
         if (has_belief(new_predicate(at_supply_closet))) {
@@ -626,8 +545,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 
 	/**
      * Plan: request_charge
-     * Handles the robot's request for a battery recharge from the charging station.
-     * - If the robot is at the charging station, it requests a recharge.
+     * Requests battery recharge if at the charging station.
      */
     plan request_charge intention: request_charge {
         if (has_belief(new_predicate(at_charging_station))) {
@@ -646,12 +564,10 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
             do remove_desire(request_charge);
         }
     }
-
+	
 	/**
      * Plan: move_to_supply_closet
-     * Moves the robot to the supply closet to collect resources.
-     * - The robot moves step by step towards the supply closet's location.
-     * - Once at the supply closet, it updates its beliefs and desires to request resources.
+     * Moves robot to the supply closet to request resources.
      */
     plan move_to_supply_closet intention: move_to_supply_closet {
         predicate pred_my_supply_closet <- get_predicate(get_belief(new_predicate(my_supply_closet)));
@@ -682,11 +598,9 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
     }
 
 	/**
-     * Plan: move_to_charging_station
-     * Moves the robot to the charging station to recharge its battery.
-     * - The robot moves step by step towards the charging station's location.
-     * - Once at the charging station, it updates its beliefs and desires to request recharging.
-     */
+	 * Plan: move_to_charging_station
+	 * Moves the robot step-by-step to the charging station. Once it arrives, it updates beliefs and requests a recharge.
+	 */
     plan move_to_charging_station intention: move_to_charging_station {
         predicate pred_my_charging_station <- get_predicate(get_belief(new_predicate(my_charging_station)));
         agent the_charging_station <- agent(pred_my_charging_station.values["agent"]);
@@ -716,10 +630,9 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
     }
 
 	/**
-     * Plan: move_to_random_location
-     * Moves the robot to a random location in the environment.
-     * - Once it reaches a random point, it stops.
-     */
+	 * Plan: move_to_random_location
+	 * Moves the robot to a random location on the grid.
+	 */
 	plan move_to_random_location intention: move_to_random_location {
 	    point random_location <- rnd(point(size, size));
 	    do goto target: random_location;
@@ -731,11 +644,10 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	}
 
 	/**
-     * Plan: clean_dirt
-     * Cleans dirt at assigned locations.
-     * - Moves the robot to the dirt location and removes the dirt patch.
-     */
-	plan clean_dirt intention: clean_dirt {
+     * Plan: move_to_clean_dirt
+     * Moves robot to dirt location and cleans it.
+     */	
+	plan move_to_clean_dirt intention: clean_dirt {
 	    if (!empty(pending_cleaning_tasks)) {
 	        point dirt_location <- pending_cleaning_tasks[0];
 	
@@ -766,7 +678,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	            cleaning_in_progress <- false;
 	        }
 	    } else {
-	        write "No hay más tareas de limpieza pendientes.";
+	        //write "No hay más tareas de limpieza pendientes.";
 	        cleaning_in_progress <- false;
 	        do remove_intention(clean_dirt);
 	    }
@@ -774,8 +686,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	
 	/**
      * Reflex: receive_inform
-     * Handles incoming inform messages from other agents.
-     * - Updates the robot's beliefs and resources based on the message content (e.g., resource provided, recharge complete).
+     * Updates robot's beliefs and resources based on incoming inform messages.
      */
     reflex receive_inform when: !empty(informs) {
         message informMessage <- informs[0];
@@ -819,11 +730,9 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
     }
 	
 	/**
-     * Reflex: receive_request
-     * Handles incoming requests for cleaning tasks.
-     * - Checks if the dirt has been assigned to this robot before proceeding.
-     * - If not assigned, adds the task to pending tasks and allows the robot to clean if not busy.
-     */
+	 * Reflex: receive_request
+	 * Processes incoming cleaning requests and adds them to the task list if the dirt is not already assigned.
+ 	*/
 	reflex receive_request when: !empty(requests) {
 	    message requestMessage <- requests[0];
 	    pair content_pair <- requestMessage.contents[0];
@@ -851,40 +760,35 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	}
 
 	/**
-     * Visual aspect:
-     * - Draws a small purple circle representing the robot on the grid.
+     * Visual aspect: Small purple circle representing the robot.
      */
     aspect robot_aspect {
-        draw circle(2.5) color: robot_color at: location;
+        draw circle(2.5) color: rgb("purple") at: location;
     }
 }
 
 /**
  * Species: dirt
- * Description:
- * Represents dirt patches of various types (dust, liquid, garbage) in the environment.
- * Dirt patches are randomly placed within the detection range of sensors or at random locations if no sensors exist.
+ * Represents different types of dirt (dust, liquid, garbage) that sensors detect.
  */
 species dirt {
 
     /**
      * Attributes:
-     * - type: Represents the type of dirt (dust, liquid, or garbage).
-     * - already_detected: Boolean flag indicating whether the dirt has been detected by a sensor.
-     * - dirt_color: Color used to represent the dirt on the grid based on its type.
-     * - detected_by_sensor: The sensor agent that detected this dirt, if any.
+     * - type: Type of dirt (dust, liquid, garbage).
+     * - already_detected: Indicates if the dirt has been detected by a sensor.
+     * - dirt_color: Color representing the type of dirt.
+     * - detected_by_sensor: Sensor that detected the dirt.
+     * - assigned_to_robot: Indicates if the dirt has been assigned for cleaning.
      */
     string type;
     bool already_detected <- false;
     rgb dirt_color;
     agent detected_by_sensor <- nil;
-	bool assigned_to_robot <- false; // Nueva variable para verificar si la suciedad ha sido asignada
+	bool assigned_to_robot <- false;
 	
     /**
-     * Initialization:
-     * - Registers the dirt in the DF under the role "Dirt".
-     * - Searches for nearby sensors in the DF and, if found, positions the dirt within the detection radius of a sensor.
-     * - Assigns a type to the dirt (dust, liquid, or garbage) and sets the corresponding color.
+     * Initialization: Registers dirt in the DF and positions it near a sensor if available.
      */
     init {
         list<agent> sensors;
@@ -933,21 +837,13 @@ species dirt {
     }
 
     /**
-     * Visual aspect:
-     * - Draws a small square representing the dirt on the grid, with the color based on its type.
+     * Visual aspect: Small square colored based on dirt type.
      */
     aspect name: dirt_aspect {
         draw geometry: square(5) color: dirt_color at: location;
     }
 }
 
-/**
- * Experiment: cleaning_simulation
- * Description:
- * The GUI-based simulation where cleaning robots, sensors, supply closets, 
- * and charging stations interact in a grid environment. Robots perform tasks such as 
- * cleaning, requesting resources, and recharging their batteries.
- */
 experiment cleaning_simulation type: gui {
     output {
         display cleaning_display type: java2D {

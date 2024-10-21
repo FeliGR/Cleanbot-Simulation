@@ -24,7 +24,7 @@ global torus: false {
     geometry grid_shape <- rectangle(size, size);
     int cycles <- 0;
     int total_cycles <- 0;
-    int cycles_to_pause <- 100000;
+    int cycles_to_pause <- 500;
     bool simulation_over <- false;
 
 	/**
@@ -35,7 +35,7 @@ global torus: false {
      * - num_charging_stations: Número de estaciones de carga.
      * - dirt_quantity: Cantidad inicial de suciedad.
      */
-    int num_robots <- 2;
+    int num_robots <- 1;
     int num_sensors <- 1;
     int num_supply_closets <- 1;
     int num_charging_stations <- 1;
@@ -49,7 +49,7 @@ global torus: false {
      * Radio de detección de los sensores
      * - radius: Alcance de detección de los sensores.
      */
-    float radius <- 15.0;
+    float radius <- 23.6;
 
     /**
      * Nombres de roles para registro en DF
@@ -218,7 +218,7 @@ species charging_station skills: [fipa] control: simple_bdi {
      * Inicialización: Establece la ubicación y registra en el DF.
      */
     init {
-        location <- {size / 2 - 5, 5};
+        location <- {size / 2 - 5, 45};
         
         ask df {
             bool registered <- register(ChargingStation_role, myself);
@@ -271,7 +271,7 @@ species supply_closet skills: [fipa] control: simple_bdi {
      * Inicialización: Establece la ubicación y registra en el DF.
      */
     init {
-        location <- {size / 2 + 5, 5};
+        location <- {size / 2 + 5, 45};
         ask df {
             bool registered <- register(SupplyCloset_role, myself);
         }
@@ -342,44 +342,67 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
      * Reflex: detect_dirt
      * Detecta suciedad dentro del radio del sensor y la asigna a un robot.
      */
+	/**
+     * Reflex: detect_dirt
+     * Detecta suciedad dentro del radio del sensor y la asigna a un robot.
+     */
 	reflex detect_dirt {
 	    loop dirt_instance over: species(dirt) {
 	        point dirt_location <- dirt_instance.location;
-	
+	        
+	        // Calculate the distance between the sensor and the dirt
 	        float distance_to_dirt <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
 	
+	        // Only proceed if the dirt is within the sensor's radius and has not been detected yet
 	        if (distance_to_dirt <= radius and not dirt_instance.already_detected) {
 	
 	            if (dirt_instance.assigned_to_robot = nil) {
+	                cleaning_robot closest_robot <- nil;
+	                float closest_distance <- 1000000.0;   // big number next to infinity
+	
+	                // Loop over all cleaning robots to find the closest available one
 	                loop robot over: species(cleaning_robot) {
+	                    // Only consider robots that are not currently busy
 	                    if (not robot.cleaning_in_progress and not robot.charging_in_progress) {
-	                        write "Sensor enviando solicitud de limpieza al robot con ubicación: " + dirt_location;
-	
-	                        list contents;
-	                        string predicado <- dirt_detected;
-	                        list concept_list <- [];
-	
-	                        pair dirt_type_pair <- dirt_type::dirt_instance.type;
-	                        pair location_pair <- location_concept::dirt_location;
-	                        add dirt_type_pair to: concept_list;
-	                        add location_pair to: concept_list;
-	
-	                        pair content_pair_resp <- predicado::concept_list;
-	                        add content_pair_resp to: contents;
-	
-	                        do start_conversation to: [robot] protocol: 'fipa-request' performative: 'request' contents: contents;
-	
-	                        dirt_instance.assigned_to_robot <- robot;
-	                        dirt_instance.already_detected <- true;
-	                        dirt_instance.detected_by_sensor <- self;
-	                        break;
+	                        // Calculate the distance between the robot and the dirt
+	                        float distance_to_robot <- sqrt((robot.location.x - dirt_location.x) ^ 2 + (robot.location.y - dirt_location.y) ^ 2);
+	                        
+	                        // If this robot is closer than the current closest robot, update the closest_robot and closest_distance
+	                        if (distance_to_robot < closest_distance) {
+	                            closest_robot <- robot;
+	                            closest_distance <- distance_to_robot;
+	                        }
 	                    }
+	                }
+	
+	                // If a closest robot was found, assign the dirt to this robot
+	                if (closest_robot != nil) {
+	                    write "El sensor está enviando una solicitud de limpieza a " + closest_robot.name + " para la ubicación: " + dirt_location;
+	
+	                    list contents;
+	                    string predicado <- dirt_detected;
+	                    list concept_list <- [];
+	
+	                    pair dirt_type_pair <- dirt_type::dirt_instance.type;
+	                    pair location_pair <- location_concept::dirt_location;
+	                    add dirt_type_pair to: concept_list;
+	                    add location_pair to: concept_list;
+	
+	                    pair content_pair_resp <- predicado::concept_list;
+	                    add content_pair_resp to: contents;
+	
+	                    // Send the cleaning request to the closest available robot using FIPA protocol
+	                    do start_conversation to: [closest_robot] protocol: 'fipa-request' performative: 'request' contents: contents;
+	
+	                    // Mark the dirt as detected and assigned
+	                    dirt_instance.assigned_to_robot <- closest_robot;
+	                    dirt_instance.already_detected <- true;
+	                    dirt_instance.detected_by_sensor <- self;
 	                }
 	            }
 	        }
 	    }
 	}
-
 	
 	/**
      * Aspecto visual: Círculo rojo para el sensor y su radio de detección.
@@ -531,6 +554,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
         add content_pair to: contents;
 
         do start_conversation to: [the_charging_station] protocol: 'fipa-request' performative: 'request' contents: contents;
+        write "\n";
         write "Robot solicitando recarga de batería a la estación de carga.";
 
         charging_in_progress <- true;
@@ -565,8 +589,6 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
             do goto target: next_step;
         } else {
             do add_belief(new_predicate(at_supply_closet));
-            write "Robot llegó al armario de repuestos.";
-
             do add_desire(request_resource);
             do remove_intention(move_to_supply_closet);
             do remove_desire(move_to_supply_closet);
@@ -598,8 +620,6 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 
         } else {
             do add_belief(new_predicate(at_charging_station));
-            write "Robot llegó a la estación de carga.";
-
             do add_desire(request_charge);
             do remove_intention(move_to_charging_station);
             do remove_desire(move_to_charging_station);
@@ -623,7 +643,6 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	            do add_desire(move_to_charging_station);
 	            do remove_intention(clean_dirt);
 	            cleaning_in_progress <- false;
-	            write "La batería está baja, necesito recargar antes de limpiar.";
 	            return;
 	        }
 	
@@ -642,16 +661,13 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	            current_battery <- current_battery - 1;
 	            do remove_belief(pred_battery);
 	            do add_belief(new_predicate(battery_level, ["level"::current_battery]));
-	            // write "El nivel de batería del robot ha disminuido a " + current_battery;
 	
 	            if (current_battery <= battery_threshold and not has_belief(new_predicate(battery_low_belief))) {
 	                do add_belief(new_predicate(battery_low_belief));
 	                do add_desire(move_to_charging_station);
-	                write "La batería está baja después de moverse, se necesita recargar.";
 	            }
 	
 	            if (current_battery <= 0) {
-	                write "Batería agotada. El robot no puede seguir moviéndose.";
 	                do remove_intention(clean_dirt);
 	                cleaning_in_progress <- false;
 	                return;
@@ -659,6 +675,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	
 	        } else {
 	            write "El robot limpia la suciedad en " + dirt_location;
+	            write "\n";
 	            loop dirt_instance over: species(dirt) {
 	                if (dirt_instance.location = dirt_location) {
 	                    ask dirt_instance {
@@ -679,7 +696,6 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	            if (current_battery <= battery_threshold and not has_belief(new_predicate(battery_low_belief))) {
 	                do add_belief(new_predicate(battery_low_belief));
 	                do add_desire(move_to_charging_station);
-	                write "La batería está baja después de limpiar, se necesita recargar.";
 	            }
 	        }
 	    } else {
@@ -733,6 +749,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	            do remove_belief(pred_battery);
 	            do add_belief(new_predicate(battery_level, ["level"::initial_battery]));
 	            write "Robot ha completado la recarga de batería. Nivel de batería: " + initial_battery;
+	            write "\n";
 	
 	            do remove_belief(new_predicate(battery_low_belief));
 	            do remove_belief(new_predicate(at_charging_station));

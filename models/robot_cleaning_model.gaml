@@ -24,7 +24,7 @@ global torus: false {
     geometry grid_shape <- rectangle(size, size);
     int cycles <- 0;
     int total_cycles <- 0;
-    int cycles_to_pause <- 500;
+    int cycles_to_pause <- 100000;    // ciclos para pausar la simulación
     bool simulation_over <- false;
 
 	/**
@@ -35,21 +35,21 @@ global torus: false {
      * - num_charging_stations: Número de estaciones de carga.
      * - dirt_quantity: Cantidad inicial de suciedad.
      */
-    int num_robots <- 1;
+    int num_robots <- 4;    // número de robots
     int num_sensors <- 1;
     int num_supply_closets <- 1;
     int num_charging_stations <- 1;
     int dirt_quantity <- 1;
     
     // Control de generación de suciedad
-    int dirt_generation_interval <- 50;
+    int dirt_generation_interval <- 15;    // 15 queda bien con 4 robots
     int last_dirt_generation <- 0;
     
     /**
      * Radio de detección de los sensores
      * - radius: Alcance de detección de los sensores.
      */
-    float radius <- 23.6;
+    float radius <- 23.6;   // un valor mayor o igual que 23.58 hace que toda la cuadrícula de 100x100 esté cubierta
 
     /**
      * Nombres de roles para registro en DF
@@ -435,7 +435,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
     bool cleaning_in_progress <- false;
     bool charging_in_progress <- false;
     int battery_threshold <- 20;
-    int initial_battery <- 100;
+    int initial_battery <- 100;    // batería inicial: no tiene por qué ser 100
     int initial_bags <- 5;
     int initial_detergent <- 100;
     
@@ -468,7 +468,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
      * También inicializa las creencias del robot (batería, recursos).
      */
     init {
-        speed <- 10.0;
+        speed <- 2.0;
         location <- rnd(point(size, size));
 
         ask df {
@@ -570,6 +570,9 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
      * Mueve el robot al armario de repuestos para solicitar recursos.
      */
     plan move_to_supply_closet intention: move_to_supply_closet {
+    	predicate pred_battery <- get_predicate(get_belief(new_predicate(battery_level)));
+    	int current_battery <- int(pred_battery.values["level"]);
+    	
         if (charging_in_progress) {
             return;
         }
@@ -581,12 +584,17 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
         float distance <- sqrt((location.x - target_location.x) ^ 2 + (location.y - target_location.y) ^ 2);
 
         if (distance > 0.5) {
-            float step_size <- min(2.0, distance);
+            float step_size <- min(speed, distance);
             float direction_x <- (target_location.x - location.x) / distance;
             float direction_y <- (target_location.y - location.y) / distance;
 
             point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
             do goto target: next_step;
+            
+            current_battery <- current_battery - 1;
+            do remove_belief(pred_battery);
+	        do add_belief(new_predicate(battery_level, ["level"::current_battery]));
+	        
         } else {
             do add_belief(new_predicate(at_supply_closet));
             do add_desire(request_resource);
@@ -600,6 +608,9 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
      * Mueve el robot a la estación de carga.
      */
     plan move_to_charging_station intention: move_to_charging_station {
+    	predicate pred_battery <- get_predicate(get_belief(new_predicate(battery_level)));
+    	int current_battery <- int(pred_battery.values["level"]);
+    	
         if (charging_in_progress) {
             return;
         }
@@ -611,12 +622,16 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
         float distance <- sqrt((location.x - target_location.x) ^ 2 + (location.y - target_location.y) ^ 2);
 
         if (distance > 0.5) {
-            float step_size <- min(2.0, distance);
+            float step_size <- min(speed, distance);
             float direction_x <- (target_location.x - location.x) / distance;
             float direction_y <- (target_location.y - location.y) / distance;
 
             point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
             do goto target: next_step;
+            
+            current_battery <- current_battery - 1;
+            do remove_belief(pred_battery);
+	        do add_belief(new_predicate(battery_level, ["level"::current_battery]));
 
         } else {
             do add_belief(new_predicate(at_charging_station));
@@ -638,7 +653,19 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	    if (not empty(pending_cleaning_tasks)) {
 	        predicate pred_battery <- get_predicate(get_belief(new_predicate(battery_level)));
 	        int current_battery <- int(pred_battery.values["level"]);
-	        if (current_battery <= battery_threshold) {
+	        
+	        // obtener distancia a la estación de carga
+	        predicate pred_my_charging_station <- get_predicate(get_belief(new_predicate(my_charging_station)));
+	        agent the_charging_station <- agent(pred_my_charging_station.values["agent"]);
+	        point charging_station_location <- the_charging_station.location;
+	
+	        // Calculate the distance to the charging station
+	        float distance_to_charging_station <- sqrt((location.x - charging_station_location.x) ^ 2 + (location.y - charging_station_location.y) ^ 2);
+	
+	        // Calculate how many movement steps are needed to reach the charging station
+	        int steps_needed <- int(ceil(distance_to_charging_station / speed));  // round up to the nearest step
+	        
+	        if (steps_needed >= current_battery - 2) {    // si va a quedar demasiado lejos de la estación de carga al avanzar un step más
 	            do add_belief(new_predicate(battery_low_belief));
 	            do add_desire(move_to_charging_station);
 	            do remove_intention(clean_dirt);
@@ -651,7 +678,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	        float distance <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
 	
 	        if (distance > 0.5) {
-	            float step_size <- min(2.0, distance);
+	            float step_size <- min(speed, distance);
 	            float direction_x <- (dirt_location.x - location.x) / distance;
 	            float direction_y <- (dirt_location.y - location.y) / distance;
 	
@@ -662,10 +689,10 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	            do remove_belief(pred_battery);
 	            do add_belief(new_predicate(battery_level, ["level"::current_battery]));
 	
-	            if (current_battery <= battery_threshold and not has_belief(new_predicate(battery_low_belief))) {
-	                do add_belief(new_predicate(battery_low_belief));
-	                do add_desire(move_to_charging_station);
-	            }
+	            //if (current_battery <= battery_threshold and not has_belief(new_predicate(battery_low_belief))) {   // Esto hace falta??
+	            //    do add_belief(new_predicate(battery_low_belief));
+	            //    do add_desire(move_to_charging_station);
+	            //}
 	
 	            if (current_battery <= 0) {
 	                do remove_intention(clean_dirt);
@@ -693,7 +720,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	            do remove_belief(pred_battery);
 	            do add_belief(new_predicate(battery_level, ["level"::current_battery]));
 	
-	            if (current_battery <= battery_threshold and not has_belief(new_predicate(battery_low_belief))) {
+	            if (current_battery <= battery_threshold and not has_belief(new_predicate(battery_low_belief))) {   // Esto hace falta??
 	                do add_belief(new_predicate(battery_low_belief));
 	                do add_desire(move_to_charging_station);
 	            }
@@ -791,11 +818,23 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
         }
     }
   	
-    /**
+	/**
      * Aspecto visual: Pequeño círculo morado representando el robot.
+     * y su cantidad de batería encima
      */
     aspect robot_aspect {
         draw circle(2.5) color: rgb("purple") at: location;
+        
+        point pt <- location;
+		point pt2 <- {pt.x-2, pt.y+1};
+		// Obtener el nivel de batería desde las creencias del robot
+	    if (has_belief(new_predicate(battery_level))) {
+	        predicate pred_battery <- get_predicate(get_belief(new_predicate(battery_level)));
+	        int current_battery <- int(pred_battery.values["level"]);
+	
+	        // Dibujar el valor actual de la batería encima del robot
+	        draw string(current_battery) color: #white font: font("Roboto", 16, #bold) at: pt2;    // COMENTAR ESTA LÍNEA PARA QUE NO SALGA EL NÚMERO
+	    }
     }
 }
 
@@ -803,7 +842,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
  * Species: dirt
  * Representa diferentes tipos de suciedad (polvo, líquido, basura) que los sensores detectan.
  */
-species dirt {
+species dirt {   // NO CAMBIAR GENERACIÓN ALEATORIA DE SUCIEDAD, QUE SI NO SE SALE DEL MAPA
 
     /**
      * Atributos:
@@ -823,41 +862,6 @@ species dirt {
      * Inicialización: Registra la suciedad en el DF y la posiciona cerca de un sensor si está disponible.
      */
     init {
-        list<agent> sensors;
-
-        ask df {
-            bool registered <- register(Dirt_role, myself);
-        }
-
-        ask df {
-            sensors <- search(Sensor_role);
-        }
-
-        if (not empty(sensors)) {
-            agent sensor_agent <- one_of(sensors);
-            point sensor_location <- sensor_agent.location;
-            point new_position <- nil;
-
-            loop while: new_position = nil {
-                float angle <- rnd(0.0, 2 * #pi);
-                float distance <- rnd(0.0, radius);
-                
-                float x_offset <- cos(angle) * distance;
-                float y_offset <- sin(angle) * distance;
-
-                float new_x <- sensor_location.x + x_offset;
-                float new_y <- sensor_location.y + y_offset;
-
-                float distancia_a_sensor <- sqrt((new_x - sensor_location.x) ^ 2 + (new_y - sensor_location.y) ^ 2);
-
-                if (distancia_a_sensor <= radius) {
-                    new_position <- {new_x, new_y};
-                }
-            }
-
-            location <- new_position;
-        }
-
         type <- one_of(["dust", "liquid", "garbage"]);
         if (type = "dust") {
             dirt_color <- rgb("#a6a6a6");

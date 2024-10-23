@@ -35,11 +35,11 @@ global torus: false {
      * - num_charging_stations: Número de estaciones de carga.
      * - dirt_quantity: Cantidad inicial de suciedad.
      */
-    int num_robots <- 4;    // número de robots
+    int num_robots <- 3;    // número de robots
     int num_sensors <- 1;
     int num_supply_closets <- 1;
     int num_charging_stations <- 1;
-    int dirt_quantity <- 1;
+    int dirt_quantity <- 3;
     
     // Control de generación de suciedad
     int dirt_generation_interval <- 15;    // 15 queda bien con 4 robots
@@ -139,6 +139,7 @@ global torus: false {
         if (total_cycles - last_dirt_generation >= dirt_generation_interval) {
             last_dirt_generation <- total_cycles;
             create species: dirt number: 1;
+            dirt_quantity <- dirt_quantity + 1;
         }
     }
 
@@ -257,7 +258,7 @@ species charging_station skills: [fipa] control: simple_bdi {
         draw geometry: square(5) color: rgb("green");
         point pt <- location;
 		point pt2 <- {pt.x-2, pt.y+1};
-		draw string("EC") color: #white font:font("Roboto", 20 , #bold) at: pt2;
+		draw string("EC") color: #white font:font("Roboto", 18 , #bold) at: pt2;
     }
 }
 
@@ -319,7 +320,7 @@ species supply_closet skills: [fipa] control: simple_bdi {
         draw geometry: rectangle(10, 4) color: rgb("orange");
         point pt <- location;
 		point pt2 <- {pt.x-2, pt.y+1};
-		draw string("AR") color: #white font:font("Roboto", 20 , #bold) at: pt2;
+		draw string("AR") color: #white font:font("Roboto", 18 , #bold) at: pt2;
     }
 }
 
@@ -560,8 +561,8 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
         charging_in_progress <- true;
 
         do remove_belief(new_predicate(battery_low_belief));
-        do remove_intention(request_charge);
-        do remove_desire(request_charge);
+        //do remove_intention(request_charge);
+        //do remove_desire(request_charge);
     }
 }
  	
@@ -708,6 +709,7 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	                    ask dirt_instance {
 	                        do die;
 	                    }
+	                    dirt_quantity <- dirt_quantity - 1;
 	                    break;
 	                }
 	            }
@@ -889,6 +891,12 @@ experiment cleaning_simulation type: gui {
             species environmental_sensor aspect: sensor_aspect;
             species cleaning_robot aspect: robot_aspect;
             species dirt aspect: dirt_aspect;
+        }
+        
+        display "cleaning_stats" type: 2d {
+        	chart "Cantidad de suciedad" type:series position:{0.0,0.0} size:{1.0,0.5} {
+				data "Número de suciedades presentes" value:dirt_quantity color:#grey;
+			}
         }
     }
 }

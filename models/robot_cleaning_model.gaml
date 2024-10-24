@@ -1,5 +1,5 @@
 /**
- * Name: robot_cleaning_model
+ * Name: robot_limpieza_model
  * Author: 
  * 	- Felipe Guzmán Rodríguez
  * 	- Pablo Díaz-Masa Valencia
@@ -8,7 +8,7 @@
  * Este modelo simula un entorno donde robots de limpieza, sensores, armarios de repuestos y estaciones de carga interactúan para mantener la limpieza.
  */
 
-model robot_cleaning_model
+model robot_limpieza_model
 
 global torus: false {
 	
@@ -31,19 +31,21 @@ global torus: false {
      * Configuración de la simulación
      * - num_robots: Número de robots.
      * - num_sensors: Número de sensores.
-     * - num_supply_closets: Número de armarios de repuestos.
-     * - num_charging_stations: Número de estaciones de carga.
-     * - dirt_quantity: Cantidad inicial de suciedad.
+     * - num_armarios_repuestos: Número de armarios de repuestos.
+     * - num_estacion_cargas: Número de estaciones de carga.
+     * - suciedad_cantidad: Cantidad inicial de suciedad.
      */
     int num_robots <- 3;    // número de robots
+    //int num_robots <- 4 min: 1 max: 10 parameter: true;    // prueba
     int num_sensors <- 1;
-    int num_supply_closets <- 1;
-    int num_charging_stations <- 1;
-    int dirt_quantity <- 3;
+    int num_armarios_repuestos <- 1;
+    int num_estacion_cargas <- 1;
+    int suciedad_cantidad <- 3;
+    float robot_speed <- 2.0 min: 0.1 max: 10.0 parameter: true;
     
     // Control de generación de suciedad
-    int dirt_generation_interval <- 15;    // 15 queda bien con 4 robots
-    int last_dirt_generation <- 0;
+    int suciedad_generation_interval <- 15;    // 15 queda bien con 4 robots
+    int last_suciedad_generation <- 0;
     
     /**
      * Radio de detección de los sensores
@@ -55,15 +57,15 @@ global torus: false {
      * Nombres de roles para registro en DF
      * - Robot_role: Rol para robots.
      * - Sensor_role: Rol para sensores.
-     * - ChargingStation_role: Rol para estaciones de carga.
+     * - Chargingestacion_role: Rol para estaciones de carga.
      * - SupplyCloset_role: Rol para armarios de repuestos.
-     * - Dirt_role: Rol para suciedad.
+     * - suciedad_role: Rol para suciedad.
      */
     string Robot_role <- "Robot";
     string Sensor_role <- "Sensor";
-    string ChargingStation_role <- "ChargingStation";
+    string Chargingestacion_role <- "Chargingestacion";
     string SupplyCloset_role <- "SupplyCloset";
-    string Dirt_role <- "Dirt";
+    string suciedad_role <- "suciedad";
 
 	/**
      * Acciones de comunicación
@@ -71,35 +73,35 @@ global torus: false {
      * - mop_action: El robot friega.
      * - collect_action: El robot recoge suciedad.
      * - recharge_action: Solicita recarga de batería.
-     * - supply_resource_action: Solicita recursos.
+     * - supply_recurso_action: Solicita recursos.
      */
     string sweep_action <- "Sweep";
     string mop_action <- "Mop";
     string collect_action <- "Collect";
     string recharge_action <- "Recharge";
-    string supply_resource_action <- "Supply_Resource";
+    string supply_recurso_action <- "Supply_recurso";
 	
 	/**
      * Predicados de comunicación
-     * - dirt_detected: Suciedad detectada.
-     * - resource_needed: Recurso necesario.
-     * - resource_provided: Recurso proporcionado.
-     * - battery_low: Batería baja.
+     * - suciedad_detectada: Suciedad detectada.
+     * - recurso_needed: Recurso necesario.
+     * - recurso_provided: Recurso proporcionado.
+     * - bateria_low: Batería baja.
      */
-    string dirt_detected <- "Dirt_Detected";
-    string resource_needed <- "Resource_Needed";
-    string resource_provided <- "Resource_Provided";
-    string battery_low <- "Battery_Low";
+    string suciedad_detectada <- "suciedad_detectada";
+    string recurso_needed <- "recurso_Needed";
+    string recurso_provided <- "recurso_Provided";
+    string bateria_low <- "bateria_Low";
 
 	/**
      * Conceptos de mensajes
-     * - dirt_type: Tipo de suciedad.
+     * - suciedad_type: Tipo de suciedad.
      * - location_concept: Ubicación de la suciedad.
-     * - resource_type: Tipo de recurso.
+     * - recurso_type: Tipo de recurso.
      */
-    string dirt_type <- "Dirt_Type";
+    string suciedad_type <- "suciedad_Type";
     string location_concept <- "Location";
-    string resource_type <- "Resource_Type";
+    string recurso_type <- "recurso_Type";
   
 	/**
      * Configuración inicial: Crea agentes en el entorno
@@ -107,19 +109,19 @@ global torus: false {
      */
 	 init {
 	 	create species: df number: 1;
-	    create species: charging_station number: num_charging_stations;
-	    create species: supply_closet number: num_supply_closets;
+	    create species: estacion_carga number: num_estacion_cargas;
+	    create species: armario_repuestos number: num_armarios_repuestos;
 
 	    loop i from: 0 to: 2 {
 	        loop j from: 0 to: 2 {
-	            create species: environmental_sensor number: 1 {
+	            create species: sensor number: 1 {
 	                location <- {(size / 3) * (i + 0.5), (size / 3) * (j + 0.5)};
 	            }
 	        }
 	    }
 	    
-	    create species: cleaning_robot number: num_robots;
-	    create species: dirt number: dirt_quantity;
+	    create species: robot_limpieza number: num_robots;
+	    create species: suciedad number: suciedad_cantidad;
 	}
     
     /**
@@ -132,14 +134,14 @@ global torus: false {
     }
     
     /**
-     * Reflex: generate_dirt
+     * Reflex: generate_suciedad
      * Crea suciedad cada cierto número de ciclos.
      */
-    reflex generate_dirt {
-        if (total_cycles - last_dirt_generation >= dirt_generation_interval) {
-            last_dirt_generation <- total_cycles;
-            create species: dirt number: 1;
-            dirt_quantity <- dirt_quantity + 1;
+    reflex generate_suciedad {
+        if (total_cycles - last_suciedad_generation >= suciedad_generation_interval) {
+            last_suciedad_generation <- total_cycles;
+            create species: suciedad number: 1;
+            suciedad_cantidad <- suciedad_cantidad + 1;
         }
     }
 
@@ -210,10 +212,10 @@ species df {
 }
 
 /**
- * Species: charging_station
+ * Species: estacion_carga
  * Gestiona las solicitudes de recarga de batería de los robots.
  */
-species charging_station skills: [fipa] control: simple_bdi {
+species estacion_carga skills: [fipa] control: simple_bdi {
 	
     /**
      * Inicialización: Establece la ubicación y registra en el DF.
@@ -222,7 +224,7 @@ species charging_station skills: [fipa] control: simple_bdi {
         location <- {size / 2 - 5, 45};
         
         ask df {
-            bool registered <- register(ChargingStation_role, myself);
+            bool registered <- register(Chargingestacion_role, myself);
         }
     }
     
@@ -237,12 +239,12 @@ species charging_station skills: [fipa] control: simple_bdi {
         do agree message: requestFromRobot contents: requestFromRobot.contents;
 
         list contents;
-        string predicado <- resource_provided;
+        string predicado <- recurso_provided;
         list concept_list <- [];
-        pair resource_type_pair <- resource_type::"battery";
-        pair quantity_pair <- "quantity"::100;
-        add resource_type_pair to: concept_list;
-        add quantity_pair to: concept_list;
+        pair recurso_type_pair <- recurso_type::"bateria";
+        pair cantidad_pair <- "cantidad"::100;
+        add recurso_type_pair to: concept_list;
+        add cantidad_pair to: concept_list;
         pair content_pair_resp <- predicado::concept_list;
         add content_pair_resp to: contents;
 
@@ -254,7 +256,7 @@ species charging_station skills: [fipa] control: simple_bdi {
 	/**
      * Aspecto visual: Cuadrado verde para la estación de carga.
      */
-    aspect station_aspect {
+    aspect estacion_aspect {
         draw geometry: square(5) color: rgb("green");
         point pt <- location;
 		point pt2 <- {pt.x-2, pt.y+1};
@@ -263,10 +265,10 @@ species charging_station skills: [fipa] control: simple_bdi {
 }
 
 /**
- * Species: supply_closet
+ * Species: armario_repuestos
  * Proporciona recursos (detergente, bolsas de basura) a los robots bajo solicitud.
  */
-species supply_closet skills: [fipa] control: simple_bdi {
+species armario_repuestos skills: [fipa] control: simple_bdi {
 
 	/**
      * Inicialización: Establece la ubicación y registra en el DF.
@@ -294,23 +296,23 @@ species supply_closet skills: [fipa] control: simple_bdi {
         string accion <- string(content_pair.key);
         list conceptos <- list(content_pair.value);
         map conceptos_map <- conceptos at 0;
-        string requested_resource <- string(conceptos_map[resource_type]);
+        string requested_recurso <- string(conceptos_map[recurso_type]);
         
-        int provided_quantity <- 5;
+        int provided_cantidad <- 5;
 
         list contents;
-        string predicado <- resource_provided;
+        string predicado <- recurso_provided;
         list concept_list <- [];
-        pair resource_type_pair <- resource_type::requested_resource;
-        pair quantity_pair <- "quantity"::provided_quantity;
-        add resource_type_pair to: concept_list;
-        add quantity_pair to: concept_list;
+        pair recurso_type_pair <- recurso_type::requested_recurso;
+        pair cantidad_pair <- "cantidad"::provided_cantidad;
+        add recurso_type_pair to: concept_list;
+        add cantidad_pair to: concept_list;
         pair content_pair_resp <- predicado::concept_list;
         add content_pair_resp to: contents;
 
         do inform message: requestFromRobot contents: contents;
 
-        write "Armario de repuestos proporcionó " + provided_quantity + " unidades de " + requested_resource + " al robot.";
+        write "Armario de repuestos proporcionó " + provided_cantidad + " unidades de " + requested_recurso + " al robot.";
     }
 
 	/**
@@ -325,10 +327,10 @@ species supply_closet skills: [fipa] control: simple_bdi {
 }
 
 /**
- * Species: environmental_sensor
+ * Species: sensor
  * Detecta suciedad dentro de un radio y envía solicitudes de limpieza a los robots.
  */
-species environmental_sensor skills: [fipa] control: simple_bdi {
+species sensor skills: [fipa] control: simple_bdi {
     
     /**
      * Inicialización: Registra el sensor en el DF.
@@ -340,33 +342,33 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
     }
 
 	/**
-     * Reflex: detect_dirt
+     * Reflex: detect_suciedad
      * Detecta suciedad dentro del radio del sensor y la asigna a un robot.
      */
 	/**
-     * Reflex: detect_dirt
+     * Reflex: detect_suciedad
      * Detecta suciedad dentro del radio del sensor y la asigna a un robot.
      */
-	reflex detect_dirt {
-	    loop dirt_instance over: species(dirt) {
-	        point dirt_location <- dirt_instance.location;
+	reflex detect_suciedad {
+	    loop suciedad_instance over: species(suciedad) {
+	        point suciedad_location <- suciedad_instance.location;
 	        
-	        // Calculate the distance between the sensor and the dirt
-	        float distance_to_dirt <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
+	        // Calculate the distance between the sensor and the suciedad
+	        float distance_to_suciedad <- sqrt((location.x - suciedad_location.x) ^ 2 + (location.y - suciedad_location.y) ^ 2);
 	
-	        // Only proceed if the dirt is within the sensor's radius and has not been detected yet
-	        if (distance_to_dirt <= radius and not dirt_instance.already_detected) {
+	        // Only proceed if the suciedad is within the sensor's radius and has not been detectada yet
+	        if (distance_to_suciedad <= radius and not suciedad_instance.ya_detectada) {
 	
-	            if (dirt_instance.assigned_to_robot = nil) {
-	                cleaning_robot closest_robot <- nil;
+	            if (suciedad_instance.asignada_a_robot = nil) {
+	                robot_limpieza closest_robot <- nil;
 	                float closest_distance <- 1000000.0;   // big number next to infinity
 	
-	                // Loop over all cleaning robots to find the closest available one
-	                loop robot over: species(cleaning_robot) {
+	                // Loop over all limpieza robots to find the closest available one
+	                loop robot over: species(robot_limpieza) {
 	                    // Only consider robots that are not currently busy
-	                    if (not robot.cleaning_in_progress and not robot.charging_in_progress) {
-	                        // Calculate the distance between the robot and the dirt
-	                        float distance_to_robot <- sqrt((robot.location.x - dirt_location.x) ^ 2 + (robot.location.y - dirt_location.y) ^ 2);
+	                    if (not robot.limpieza_en_progreso and not robot.carga_en_progreso) {
+	                        // Calculate the distance between the robot and the suciedad
+	                        float distance_to_robot <- sqrt((robot.location.x - suciedad_location.x) ^ 2 + (robot.location.y - suciedad_location.y) ^ 2);
 	                        
 	                        // If this robot is closer than the current closest robot, update the closest_robot and closest_distance
 	                        if (distance_to_robot < closest_distance) {
@@ -376,29 +378,29 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
 	                    }
 	                }
 	
-	                // If a closest robot was found, assign the dirt to this robot
+	                // If a closest robot was found, assign the suciedad to this robot
 	                if (closest_robot != nil) {
-	                    write "El sensor está enviando una solicitud de limpieza a " + closest_robot.name + " para la ubicación: " + dirt_location;
+	                    write "El sensor está enviando una solicitud de limpieza a " + closest_robot.name + " para la ubicación: " + suciedad_location;
 	
 	                    list contents;
-	                    string predicado <- dirt_detected;
+	                    string predicado <- suciedad_detectada;
 	                    list concept_list <- [];
 	
-	                    pair dirt_type_pair <- dirt_type::dirt_instance.type;
-	                    pair location_pair <- location_concept::dirt_location;
-	                    add dirt_type_pair to: concept_list;
+	                    pair suciedad_type_pair <- suciedad_type::suciedad_instance.type;
+	                    pair location_pair <- location_concept::suciedad_location;
+	                    add suciedad_type_pair to: concept_list;
 	                    add location_pair to: concept_list;
 	
 	                    pair content_pair_resp <- predicado::concept_list;
 	                    add content_pair_resp to: contents;
 	
-	                    // Send the cleaning request to the closest available robot using FIPA protocol
+	                    // Send the limpieza request to the closest available robot using FIPA protocol
 	                    do start_conversation to: [closest_robot] protocol: 'fipa-request' performative: 'request' contents: contents;
 	
-	                    // Mark the dirt as detected and assigned
-	                    dirt_instance.assigned_to_robot <- closest_robot;
-	                    dirt_instance.already_detected <- true;
-	                    dirt_instance.detected_by_sensor <- self;
+	                    // Mark the suciedad as detectada and assigned
+	                    suciedad_instance.asignada_a_robot <- closest_robot;
+	                    suciedad_instance.ya_detectada <- true;
+	                    suciedad_instance.detectada_por_sensor <- self;
 	                }
 	            }
 	        }
@@ -415,172 +417,174 @@ species environmental_sensor skills: [fipa] control: simple_bdi {
 }
 
 /**
- * Species: cleaning_robot
+ * Species: robot_limpieza
  * Gestiona el movimiento, solicita recursos y limpia la suciedad.
  */
-species cleaning_robot skills: [moving, fipa] control: simple_bdi {
+species robot_limpieza skills: [moving, fipa] control: simple_bdi {
    
    /**
      * Atributos:
-     * - my_supply_closets: Armarios de repuestos disponibles.
-     * - my_charging_stations: Estaciones de carga disponibles.
-     * - pending_cleaning_tasks: Lista de tareas de limpieza pendientes.
-     * - assigned_dirt_locations: Ubicaciones de suciedad asignadas a este robot.
-     * - cleaning_in_progress: Indica si el robot está limpiando actualmente.
-     * - charging_in_progress: Indica si el robot está en proceso de recarga.
+     * - my_armario_repuestoss: Armarios de repuestos disponibles.
+     * - my_estacion_cargas: Estaciones de carga disponibles.
+     * - tareas_limpieza_pendientes: Lista de tareas de limpieza pendientes.
+     * - assigned_suciedad_locations: Ubicaciones de suciedad asignadas a este robot.
+     * - limpieza_en_progreso: Indica si el robot está limpiando actualmente.
+     * - carga_en_progreso: Indica si el robot está en proceso de recarga.
      */
-    list<agent> my_supply_closets;
-    list<agent> my_charging_stations;
-    list<point> pending_cleaning_tasks <- [];
-    list<point> assigned_dirt_locations <- [];
-    bool cleaning_in_progress <- false;
-    bool charging_in_progress <- false;
-    int battery_threshold <- 20;
-    int initial_battery <- 100;    // batería inicial: no tiene por qué ser 100
+    list<agent> my_armario_repuestoss;
+    list<agent> my_estacion_cargas;
+    list<point> tareas_limpieza_pendientes <- [];
+    list<point> assigned_suciedad_locations <- [];
+    bool limpieza_en_progreso <- false;
+    bool carga_en_progreso <- false;
+    int bateria_threshold <- 20;
+    int initial_bateria <- 100;    // batería inicial: no tiene por qué ser 100
     int initial_bags <- 5;
     int initial_detergent <- 100;
+    //float speed <- robot_speed;
+    float speed <- robot_speed update: robot_speed;
     
     /**
      * Atributos de creencias
      * - Almacena creencias sobre ubicación, batería, recursos y agentes asignados.
      */
-    string at_supply_closet <- "at_supply_closet";
-    string at_charging_station <- "at_charging_station";
-    string resource_needed_belief <- "resource_needed";
-    string battery_low_belief <- "battery_low";
-    string my_supply_closet <- "my_supply_closet";
-    string my_charging_station <- "my_charging_station";
-    string battery_level <- "battery_level";
-    string bags_quantity <- "bags_quantity";
+    string at_armario_repuestos <- "at_armario_repuestos";
+    string at_estacion_carga <- "at_estacion_carga";
+    string recurso_needed_belief <- "recurso_needed";
+    string bateria_low_belief <- "bateria_low";
+    string my_armario_repuestos <- "my_armario_repuestos";
+    string my_estacion_carga <- "my_estacion_carga";
+    string bateria_level <- "bateria_level";
+    string bags_cantidad <- "bags_cantidad";
     string detergent_level <- "detergent_level";
 
     /**
      * Predicados: Acciones y deseos para solicitudes de recursos y movimiento.
      */
-    predicate request_resource <- new_predicate("request_resource");
-    predicate request_charge <- new_predicate("request_charge");
-    predicate move_to_supply_closet <- new_predicate("move_to_supply_closet");
-    predicate move_to_charging_station <- new_predicate("move_to_charging_station");
+    predicate request_recurso <- new_predicate("request_recurso");
+    predicate request_carga <- new_predicate("request_carga");
+    predicate move_to_armario_repuestos <- new_predicate("move_to_armario_repuestos");
+    predicate move_to_estacion_carga <- new_predicate("move_to_estacion_carga");
     predicate move_to_random_location <- new_predicate("move_to_random_location");
-    predicate clean_dirt <- new_predicate("clean_dirt");
+    predicate limpiar_suciedad <- new_predicate("limpiar_suciedad");
     
     /**
      * Inicialización: Establece ubicación, velocidad y registra el robot en el DF.
      * También inicializa las creencias del robot (batería, recursos).
      */
     init {
-        speed <- 2.0;
+        //speed <- 2.0;
         location <- rnd(point(size, size));
 
         ask df {
             bool registered <- register(Robot_role, myself);
-            myself.my_supply_closets <- search(SupplyCloset_role);
-            myself.my_charging_stations <- search(ChargingStation_role);
+            myself.my_armario_repuestoss <- search(SupplyCloset_role);
+            myself.my_estacion_cargas <- search(Chargingestacion_role);
         }
 
-        do add_belief(new_predicate(battery_level, ["level"::initial_battery]));
-        do add_belief(new_predicate(bags_quantity, ["quantity"::initial_bags]));
+        do add_belief(new_predicate(bateria_level, ["level"::initial_bateria]));
+        do add_belief(new_predicate(bags_cantidad, ["cantidad"::initial_bags]));
         do add_belief(new_predicate(detergent_level, ["level"::initial_detergent]));
 
-        if (not empty(my_supply_closets)) {
-            do add_belief(new_predicate(my_supply_closet, ["agent"::(my_supply_closets at 0)]));
+        if (not empty(my_armario_repuestoss)) {
+            do add_belief(new_predicate(my_armario_repuestos, ["agent"::(my_armario_repuestoss at 0)]));
         }
-        if (not empty(my_charging_stations)) {
-            do add_belief(new_predicate(my_charging_station, ["agent"::(my_charging_stations at 0)]));
+        if (not empty(my_estacion_cargas)) {
+            do add_belief(new_predicate(my_estacion_carga, ["agent"::(my_estacion_cargas at 0)]));
         }
     }
 
     /**
      * Regla: Moverse al armario de repuestos cuando se necesita un recurso.
      */
-    rule beliefs: [new_predicate(resource_needed_belief)] when: not has_belief(new_predicate(at_supply_closet)) new_desire: move_to_supply_closet;
+    rule beliefs: [new_predicate(recurso_needed_belief)] when: not has_belief(new_predicate(at_armario_repuestos)) new_desire: move_to_armario_repuestos;
 
     /**
      * Regla: Moverse a la estación de carga cuando la batería es baja.
      */
-    rule beliefs: [new_predicate(battery_low_belief)] when: not has_belief(new_predicate(at_charging_station)) new_desire: move_to_charging_station;
+    rule beliefs: [new_predicate(bateria_low_belief)] when: not has_belief(new_predicate(at_estacion_carga)) new_desire: move_to_estacion_carga;
 
     /**
      * Regla: Generar deseo de limpiar suciedad cuando hay tareas pendientes.
      */
-    rule when: (not empty(pending_cleaning_tasks) and not cleaning_in_progress) new_desire: clean_dirt;
+    rule when: (not empty(tareas_limpieza_pendientes) and not limpieza_en_progreso) new_desire: limpiar_suciedad;
 
     /**
-     * Plan: request_resource
+     * Plan: request_recurso
      * Maneja las solicitudes de recursos (detergente o bolsas) si está en el armario de repuestos.
      */
-   	plan request_resource intention: request_resource {
-    if (has_belief(new_predicate(at_supply_closet))) {
-        if (has_belief(new_predicate(resource_needed_belief))) {
-            predicate pred_resource_needed <- get_predicate(get_belief(new_predicate(resource_needed_belief)));
-            string resource_type_needed <- string(pred_resource_needed.values["type"]);
-            write "Recurso necesario: " + resource_type_needed;
+   	plan request_recurso intention: request_recurso {
+    if (has_belief(new_predicate(at_armario_repuestos))) {
+        if (has_belief(new_predicate(recurso_needed_belief))) {
+            predicate pred_recurso_needed <- get_predicate(get_belief(new_predicate(recurso_needed_belief)));
+            string recurso_type_needed <- string(pred_recurso_needed.values["type"]);
+            write "Recurso necesario: " + recurso_type_needed;
 
-            do remove_belief(pred_resource_needed);
-            predicate pred_supply_closet <- get_predicate(get_belief(new_predicate(my_supply_closet)));
-            agent the_supply_closet <- agent(pred_supply_closet.values["agent"]);
+            do remove_belief(pred_recurso_needed);
+            predicate pred_armario_repuestos <- get_predicate(get_belief(new_predicate(my_armario_repuestos)));
+            agent el_armario_repuestos <- agent(pred_armario_repuestos.values["agent"]);
 
             list contents;
             list concept_list <- [];
-            pair resource_type_pair <- resource_type::resource_type_needed;
-            add resource_type_pair to: concept_list;
-            pair content_pair <- supply_resource_action::concept_list;
+            pair recurso_type_pair <- recurso_type::recurso_type_needed;
+            add recurso_type_pair to: concept_list;
+            pair content_pair <- supply_recurso_action::concept_list;
             add content_pair to: contents;
 
-            do start_conversation to: [the_supply_closet] protocol: 'fipa-request' performative: 'request' contents: contents;
-            write "Robot solicitando recurso " + resource_type_needed + " al armario de repuestos.";
+            do start_conversation to: [el_armario_repuestos] protocol: 'fipa-request' performative: 'request' contents: contents;
+            write "Robot solicitando recurso " + recurso_type_needed + " al armario de repuestos.";
 
-            do remove_belief(new_predicate(resource_needed_belief));
-            do remove_intention(request_resource);
-            do remove_desire(request_resource);
+            do remove_belief(new_predicate(recurso_needed_belief));
+            do remove_intention(request_recurso);
+            do remove_desire(request_recurso);
         } else {
             write "Robot no necesita más recursos. Eliminando la intención de reabastecimiento.";
-            do remove_intention(request_resource);
+            do remove_intention(request_recurso);
         }
-        do remove_belief(new_predicate(at_supply_closet));
+        do remove_belief(new_predicate(at_armario_repuestos));
     }
 }
 
     /**
-     * Plan: request_charge
+     * Plan: request_carga
      * Solicita recarga de batería si está en la estación de carga.
      */
- 	plan request_charge intention: request_charge {
-    if (has_belief(new_predicate(at_charging_station)) and not charging_in_progress) {
-        predicate pred_charging_station <- get_predicate(get_belief(new_predicate(my_charging_station)));
-        agent the_charging_station <- agent(pred_charging_station.values["agent"]);
+ 	plan request_carga intention: request_carga {
+    if (has_belief(new_predicate(at_estacion_carga)) and not carga_en_progreso) {
+        predicate pred_estacion_carga <- get_predicate(get_belief(new_predicate(my_estacion_carga)));
+        agent la_estacion_carga <- agent(pred_estacion_carga.values["agent"]);
 
         list contents;
         pair content_pair <- recharge_action::[];
         add content_pair to: contents;
 
-        do start_conversation to: [the_charging_station] protocol: 'fipa-request' performative: 'request' contents: contents;
+        do start_conversation to: [la_estacion_carga] protocol: 'fipa-request' performative: 'request' contents: contents;
         write "\n";
         write "Robot solicitando recarga de batería a la estación de carga.";
 
-        charging_in_progress <- true;
+        carga_en_progreso <- true;
 
-        do remove_belief(new_predicate(battery_low_belief));
-        //do remove_intention(request_charge);
-        //do remove_desire(request_charge);
+        do remove_belief(new_predicate(bateria_low_belief));
+        //do remove_intention(request_carga);
+        //do remove_desire(request_carga);
     }
 }
  	
     /**
-     * Plan: move_to_supply_closet
+     * Plan: move_to_armario_repuestos
      * Mueve el robot al armario de repuestos para solicitar recursos.
      */
-    plan move_to_supply_closet intention: move_to_supply_closet {
-    	predicate pred_battery <- get_predicate(get_belief(new_predicate(battery_level)));
-    	int current_battery <- int(pred_battery.values["level"]);
+    plan move_to_armario_repuestos intention: move_to_armario_repuestos {
+    	predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
+    	int bateria_actual <- int(pred_bateria.values["level"]);
     	
-        if (charging_in_progress) {
+        if (carga_en_progreso) {
             return;
         }
 
-        predicate pred_my_supply_closet <- get_predicate(get_belief(new_predicate(my_supply_closet)));
-        agent the_supply_closet <- agent(pred_my_supply_closet.values["agent"]);
-        point target_location <- the_supply_closet.location;
+        predicate pred_my_armario_repuestos <- get_predicate(get_belief(new_predicate(my_armario_repuestos)));
+        agent el_armario_repuestos <- agent(pred_my_armario_repuestos.values["agent"]);
+        point target_location <- el_armario_repuestos.location;
 
         float distance <- sqrt((location.x - target_location.x) ^ 2 + (location.y - target_location.y) ^ 2);
 
@@ -592,33 +596,33 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
             point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
             do goto target: next_step;
             
-            current_battery <- current_battery - 1;
-            do remove_belief(pred_battery);
-	        do add_belief(new_predicate(battery_level, ["level"::current_battery]));
+            bateria_actual <- bateria_actual - 1;
+            do remove_belief(pred_bateria);
+	        do add_belief(new_predicate(bateria_level, ["level"::bateria_actual]));
 	        
         } else {
-            do add_belief(new_predicate(at_supply_closet));
-            do add_desire(request_resource);
-            do remove_intention(move_to_supply_closet);
-            do remove_desire(move_to_supply_closet);
+            do add_belief(new_predicate(at_armario_repuestos));
+            do add_desire(request_recurso);
+            do remove_intention(move_to_armario_repuestos);
+            do remove_desire(move_to_armario_repuestos);
         }
     }
 
     /**
-     * Plan: move_to_charging_station
+     * Plan: move_to_estacion_carga
      * Mueve el robot a la estación de carga.
      */
-    plan move_to_charging_station intention: move_to_charging_station {
-    	predicate pred_battery <- get_predicate(get_belief(new_predicate(battery_level)));
-    	int current_battery <- int(pred_battery.values["level"]);
+    plan move_to_estacion_carga intention: move_to_estacion_carga {
+    	predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
+    	int bateria_actual <- int(pred_bateria.values["level"]);
     	
-        if (charging_in_progress) {
+        if (carga_en_progreso) {
             return;
         }
 
-        predicate pred_my_charging_station <- get_predicate(get_belief(new_predicate(my_charging_station)));
-        agent the_charging_station <- agent(pred_my_charging_station.values["agent"]);
-        point target_location <- the_charging_station.location;
+        predicate pred_my_estacion_carga <- get_predicate(get_belief(new_predicate(my_estacion_carga)));
+        agent la_estacion_carga <- agent(pred_my_estacion_carga.values["agent"]);
+        point target_location <- la_estacion_carga.location;
 
         float distance <- sqrt((location.x - target_location.x) ^ 2 + (location.y - target_location.y) ^ 2);
 
@@ -630,106 +634,106 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
             point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
             do goto target: next_step;
             
-            current_battery <- current_battery - 1;
-            do remove_belief(pred_battery);
-	        do add_belief(new_predicate(battery_level, ["level"::current_battery]));
+            bateria_actual <- bateria_actual - 1;
+            do remove_belief(pred_bateria);
+	        do add_belief(new_predicate(bateria_level, ["level"::bateria_actual]));
 
         } else {
-            do add_belief(new_predicate(at_charging_station));
-            do add_desire(request_charge);
-            do remove_intention(move_to_charging_station);
-            do remove_desire(move_to_charging_station);
+            do add_belief(new_predicate(at_estacion_carga));
+            do add_desire(request_carga);
+            do remove_intention(move_to_estacion_carga);
+            do remove_desire(move_to_estacion_carga);
         }
     }
 
     /**
-     * Plan: move_to_clean_dirt
+     * Plan: move_to_limpiar_suciedad
      * Mueve el robot a la ubicación de suciedad y la limpia.
      */	
-	plan move_to_clean_dirt intention: clean_dirt {
-	    if (charging_in_progress) {
+	plan move_to_limpiar_suciedad intention: limpiar_suciedad {
+	    if (carga_en_progreso) {
 	        return;
 	    }
 	
-	    if (not empty(pending_cleaning_tasks)) {
-	        predicate pred_battery <- get_predicate(get_belief(new_predicate(battery_level)));
-	        int current_battery <- int(pred_battery.values["level"]);
+	    if (not empty(tareas_limpieza_pendientes)) {
+	        predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
+	        int bateria_actual <- int(pred_bateria.values["level"]);
 	        
 	        // obtener distancia a la estación de carga
-	        predicate pred_my_charging_station <- get_predicate(get_belief(new_predicate(my_charging_station)));
-	        agent the_charging_station <- agent(pred_my_charging_station.values["agent"]);
-	        point charging_station_location <- the_charging_station.location;
+	        predicate pred_my_estacion_carga <- get_predicate(get_belief(new_predicate(my_estacion_carga)));
+	        agent la_estacion_carga <- agent(pred_my_estacion_carga.values["agent"]);
+	        point estacion_carga_location <- la_estacion_carga.location;
 	
-	        // Calculate the distance to the charging station
-	        float distance_to_charging_station <- sqrt((location.x - charging_station_location.x) ^ 2 + (location.y - charging_station_location.y) ^ 2);
+	        // Calculate the distance to the charging estacion
+	        float distance_to_estacion_carga <- sqrt((location.x - estacion_carga_location.x) ^ 2 + (location.y - estacion_carga_location.y) ^ 2);
 	
-	        // Calculate how many movement steps are needed to reach the charging station
-	        int steps_needed <- int(ceil(distance_to_charging_station / speed));  // round up to the nearest step
+	        // Calculate how many movement steps are needed to reach the charging estacion
+	        int steps_necesarios <- int(ceil(distance_to_estacion_carga / speed));  // round up to the nearest step
 	        
-	        if (steps_needed >= current_battery - 2) {    // si va a quedar demasiado lejos de la estación de carga al avanzar un step más
-	            do add_belief(new_predicate(battery_low_belief));
-	            do add_desire(move_to_charging_station);
-	            do remove_intention(clean_dirt);
-	            cleaning_in_progress <- false;
+	        if (steps_necesarios >= bateria_actual - 2) {    // si va a quedar demasiado lejos de la estación de carga al avanzar un step más
+	            do add_belief(new_predicate(bateria_low_belief));
+	            do add_desire(move_to_estacion_carga);
+	            do remove_intention(limpiar_suciedad);
+	            limpieza_en_progreso <- false;
 	            return;
 	        }
 	
-	        point dirt_location <- pending_cleaning_tasks[0];
+	        point suciedad_location <- tareas_limpieza_pendientes[0];
 	
-	        float distance <- sqrt((location.x - dirt_location.x) ^ 2 + (location.y - dirt_location.y) ^ 2);
+	        float distance <- sqrt((location.x - suciedad_location.x) ^ 2 + (location.y - suciedad_location.y) ^ 2);
 	
 	        if (distance > 0.5) {
 	            float step_size <- min(speed, distance);
-	            float direction_x <- (dirt_location.x - location.x) / distance;
-	            float direction_y <- (dirt_location.y - location.y) / distance;
+	            float direction_x <- (suciedad_location.x - location.x) / distance;
+	            float direction_y <- (suciedad_location.y - location.y) / distance;
 	
 	            point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
 	            do goto target: next_step;
 	
-	            current_battery <- current_battery - 1;
-	            do remove_belief(pred_battery);
-	            do add_belief(new_predicate(battery_level, ["level"::current_battery]));
+	            bateria_actual <- bateria_actual - 1;
+	            do remove_belief(pred_bateria);
+	            do add_belief(new_predicate(bateria_level, ["level"::bateria_actual]));
 	
-	            //if (current_battery <= battery_threshold and not has_belief(new_predicate(battery_low_belief))) {   // Esto hace falta??
-	            //    do add_belief(new_predicate(battery_low_belief));
-	            //    do add_desire(move_to_charging_station);
+	            //if (bateria_actual <= bateria_threshold and not has_belief(new_predicate(bateria_low_belief))) {   // Esto hace falta??
+	            //    do add_belief(new_predicate(bateria_low_belief));
+	            //    do add_desire(move_to_estacion_carga);
 	            //}
 	
-	            if (current_battery <= 0) {
-	                do remove_intention(clean_dirt);
-	                cleaning_in_progress <- false;
+	            if (bateria_actual <= 0) {
+	                do remove_intention(limpiar_suciedad);
+	                limpieza_en_progreso <- false;
 	                return;
 	            }
 	
 	        } else {
-	            write "El robot limpia la suciedad en " + dirt_location;
+	            write "El robot limpia la suciedad en " + suciedad_location;
 	            write "\n";
-	            loop dirt_instance over: species(dirt) {
-	                if (dirt_instance.location = dirt_location) {
-	                    ask dirt_instance {
+	            loop suciedad_instance over: species(suciedad) {
+	                if (suciedad_instance.location = suciedad_location) {
+	                    ask suciedad_instance {
 	                        do die;
 	                    }
-	                    dirt_quantity <- dirt_quantity - 1;
+	                    suciedad_cantidad <- suciedad_cantidad - 1;
 	                    break;
 	                }
 	            }
 	
-	            remove dirt_location from: pending_cleaning_tasks;
-	            do remove_intention(clean_dirt);
-	            cleaning_in_progress <- false;
+	            remove suciedad_location from: tareas_limpieza_pendientes;
+	            do remove_intention(limpiar_suciedad);
+	            limpieza_en_progreso <- false;
 	
-	            current_battery <- current_battery - 1;
-	            do remove_belief(pred_battery);
-	            do add_belief(new_predicate(battery_level, ["level"::current_battery]));
+	            bateria_actual <- bateria_actual - 1;
+	            do remove_belief(pred_bateria);
+	            do add_belief(new_predicate(bateria_level, ["level"::bateria_actual]));
 	
-	            if (current_battery <= battery_threshold and not has_belief(new_predicate(battery_low_belief))) {   // Esto hace falta??
-	                do add_belief(new_predicate(battery_low_belief));
-	                do add_desire(move_to_charging_station);
+	            if (bateria_actual <= bateria_threshold and not has_belief(new_predicate(bateria_low_belief))) {   // Esto hace falta??
+	                do add_belief(new_predicate(bateria_low_belief));
+	                do add_desire(move_to_estacion_carga);
 	            }
 	        }
 	    } else {
-	        cleaning_in_progress <- false;
-	        do remove_intention(clean_dirt);
+	        limpieza_en_progreso <- false;
+	        do remove_intention(limpiar_suciedad);
 	    }
 	}
 	
@@ -743,53 +747,53 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
 	
 	    pair content_pair <- informMessage.contents[0];
 	
-	    if (content_pair.key = resource_provided) {
+	    if (content_pair.key = recurso_provided) {
 	        list conceptos_list <- content_pair.value;
 	        map conceptos_map <- map(conceptos_list);
-	        string provided_resource <- string(conceptos_map[resource_type]);
-	        int provided_quantity <- int(conceptos_map["quantity"]);
+	        string recurso_provisto <- string(conceptos_map[recurso_type]);
+	        int provided_cantidad <- int(conceptos_map["cantidad"]);
 	
-	        if (provided_resource = "detergent") {
+	        if (recurso_provisto = "detergent") {
 	            predicate pred_detergent <- get_predicate(get_belief(new_predicate(detergent_level)));
 	            int current_detergent <- int(pred_detergent.values["level"]);
-	            current_detergent <- current_detergent + provided_quantity;
+	            current_detergent <- current_detergent + provided_cantidad;
 	            do remove_belief(pred_detergent);
 	            do add_belief(new_predicate(detergent_level, ["level"::current_detergent]));
 	            write "Robot actualizó su nivel de detergente a " + current_detergent;
 	
-	            do remove_belief(new_predicate(at_supply_closet));
-	            do remove_intention(request_resource);
-	            do remove_desire(request_resource);
+	            do remove_belief(new_predicate(at_armario_repuestos));
+	            do remove_intention(request_recurso);
+	            do remove_desire(request_recurso);
 	            
-	        } else if (provided_resource = "trash_bags") {
-	            predicate pred_bags <- get_predicate(get_belief(new_predicate(bags_quantity)));
-	            int current_bags <- int(pred_bags.values["quantity"]);
-	            current_bags <- current_bags + provided_quantity;
+	        } else if (recurso_provisto = "trash_bags") {
+	            predicate pred_bags <- get_predicate(get_belief(new_predicate(bags_cantidad)));
+	            int current_bags <- int(pred_bags.values["cantidad"]);
+	            current_bags <- current_bags + provided_cantidad;
 	            do remove_belief(pred_bags);
-	            do add_belief(new_predicate(bags_quantity, ["quantity"::current_bags]));
+	            do add_belief(new_predicate(bags_cantidad, ["cantidad"::current_bags]));
 	            write "Robot actualizó su cantidad de bolsas a " + current_bags;
 	
-	            do remove_belief(new_predicate(at_supply_closet));
-	            do remove_intention(request_resource);
-	            do remove_desire(request_resource);
+	            do remove_belief(new_predicate(at_armario_repuestos));
+	            do remove_intention(request_recurso);
+	            do remove_desire(request_recurso);
 	            
-	        } else if (provided_resource = "battery") {
-	            predicate pred_battery <- get_predicate(get_belief(new_predicate(battery_level)));
-	            do remove_belief(pred_battery);
-	            do add_belief(new_predicate(battery_level, ["level"::initial_battery]));
-	            write "Robot ha completado la recarga de batería. Nivel de batería: " + initial_battery;
+	        } else if (recurso_provisto = "bateria") {
+	            predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
+	            do remove_belief(pred_bateria);
+	            do add_belief(new_predicate(bateria_level, ["level"::initial_bateria]));
+	            write "Robot ha completado la recarga de batería. Nivel de batería: " + initial_bateria;
 	            write "\n";
 	
-	            do remove_belief(new_predicate(battery_low_belief));
-	            do remove_belief(new_predicate(at_charging_station));
-	            do remove_intention(request_charge);
-	            do remove_desire(request_charge);
-	            charging_in_progress <- false;
+	            do remove_belief(new_predicate(bateria_low_belief));
+	            do remove_belief(new_predicate(at_estacion_carga));
+	            do remove_intention(request_carga);
+	            do remove_desire(request_carga);
+	            carga_en_progreso <- false;
 	        }
 	
-	        if (not empty(pending_cleaning_tasks) and not cleaning_in_progress) {
-	            cleaning_in_progress <- true;
-	            do add_desire(clean_dirt);
+	        if (not empty(tareas_limpieza_pendientes) and not limpieza_en_progreso) {
+	            limpieza_en_progreso <- true;
+	            do add_desire(limpiar_suciedad);
 	        }
 	    }
 	}
@@ -802,17 +806,17 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
         message requestMessage <- requests[0];
         pair content_pair <- requestMessage.contents[0];
 
-        if (content_pair.key = dirt_detected) {
+        if (content_pair.key = suciedad_detectada) {
             list conceptos_list <- content_pair.value;
             map conceptos_map <- map(conceptos_list);
-            point dirt_location <- point(conceptos_map[location_concept]);
+            point suciedad_location <- point(conceptos_map[location_concept]);
 
-            loop dirt_instance over: species(dirt) {
-                if (dirt_instance.location = dirt_location) {
-                    if (dirt_instance.assigned_to_robot = self) {
-                        if (not (pending_cleaning_tasks contains dirt_location)) {
-                            add dirt_location to: pending_cleaning_tasks;
-                            write "Robot recibe nueva solicitud de limpieza para la ubicación: " + dirt_location;
+            loop suciedad_instance over: species(suciedad) {
+                if (suciedad_instance.location = suciedad_location) {
+                    if (suciedad_instance.asignada_a_robot = self) {
+                        if (not (tareas_limpieza_pendientes contains suciedad_location)) {
+                            add suciedad_location to: tareas_limpieza_pendientes;
+                            write "Robot recibe nueva solicitud de limpieza para la ubicación: " + suciedad_location;
                         }
                     }
                 }
@@ -830,73 +834,78 @@ species cleaning_robot skills: [moving, fipa] control: simple_bdi {
         point pt <- location;
 		point pt2 <- {pt.x-2, pt.y+1};
 		// Obtener el nivel de batería desde las creencias del robot
-	    if (has_belief(new_predicate(battery_level))) {
-	        predicate pred_battery <- get_predicate(get_belief(new_predicate(battery_level)));
-	        int current_battery <- int(pred_battery.values["level"]);
+	    if (has_belief(new_predicate(bateria_level))) {
+	        predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
+	        int bateria_actual <- int(pred_bateria.values["level"]);
 	
 	        // Dibujar el valor actual de la batería encima del robot
-	        draw string(current_battery) color: #white font: font("Roboto", 16, #bold) at: pt2;    // COMENTAR ESTA LÍNEA PARA QUE NO SALGA EL NÚMERO
+	        draw string(bateria_actual) color: #white font: font("Roboto", 16, #bold) at: pt2;    // COMENTAR ESTA LÍNEA PARA QUE NO SALGA EL NÚMERO
 	    }
     }
 }
 
 /**
- * Species: dirt
+ * Species: suciedad
  * Representa diferentes tipos de suciedad (polvo, líquido, basura) que los sensores detectan.
  */
-species dirt {   // NO CAMBIAR GENERACIÓN ALEATORIA DE SUCIEDAD, QUE SI NO SE SALE DEL MAPA
+species suciedad {   // NO CAMBIAR GENERACIÓN ALEATORIA DE SUCIEDAD, QUE SI NO SE SALE DEL MAPA
 
     /**
      * Atributos:
-     * - type: Tipo de suciedad (dust, liquid, garbage).
-     * - already_detected: Indica si la suciedad ha sido detectada por un sensor.
-     * - dirt_color: Color que representa el tipo de suciedad.
-     * - detected_by_sensor: Sensor que detectó la suciedad.
-     * - assigned_to_robot: Indica el robot asignado para limpiar.
+     * - type: Tipo de suciedad (polvo, liquido, basura).
+     * - ya_detectada: Indica si la suciedad ha sido detectada por un sensor.
+     * - suciedad_color: Color que representa el tipo de suciedad.
+     * - detectada_por_sensor: Sensor que detectó la suciedad.
+     * - asignada_a_robot: Indica el robot asignado para limpiar.
      */
     string type;
-    bool already_detected <- false;
-    rgb dirt_color;
-    agent detected_by_sensor <- nil;
-    agent assigned_to_robot <- nil;
+    bool ya_detectada <- false;
+    rgb suciedad_color;
+    agent detectada_por_sensor <- nil;
+    agent asignada_a_robot <- nil;
 	
     /**
      * Inicialización: Registra la suciedad en el DF y la posiciona cerca de un sensor si está disponible.
      */
     init {
-        type <- one_of(["dust", "liquid", "garbage"]);
-        if (type = "dust") {
-            dirt_color <- rgb("#a6a6a6");
-        } else if (type = "liquid") {
-            dirt_color <- rgb("#69a1ff");
-        } else if (type = "garbage") {
-            dirt_color <- rgb("#aa8222");
+        type <- one_of(["polvo", "liquido", "basura"]);
+        if (type = "polvo") {
+            suciedad_color <- rgb("#a6a6a6");
+        } else if (type = "liquido") {
+            suciedad_color <- rgb("#69a1ff");
+        } else if (type = "basura") {
+            suciedad_color <- rgb("#aa8222");
         }
     }
 
     /**
      * Aspecto visual: Pequeño cuadrado coloreado según el tipo de suciedad.
      */
-    aspect name: dirt_aspect {
-        draw geometry: square(5) color: dirt_color at: location;
+    aspect name: suciedad_aspect {
+        draw geometry: square(5) color: suciedad_color at: location;
     }
 }
 
-experiment cleaning_simulation type: gui {
+experiment simulacion_limpieza type: gui {
+	
+	parameter "Velocidad de los robots" var:robot_speed category:"Parámetros interactivos";
+	parameter "Frecuencia de generación de suciedad" var:suciedad_generation_interval category:"Parámetros interactivos";
+	
     output {
-        display cleaning_display type: java2D {
+        display mapa type: java2D {
             grid my_grid border: rgb("#C4C4C4");
-            species charging_station aspect: station_aspect;
-            species supply_closet aspect: closet_aspect;
-            species environmental_sensor aspect: sensor_aspect;
-            species cleaning_robot aspect: robot_aspect;
-            species dirt aspect: dirt_aspect;
+            species estacion_carga aspect: estacion_aspect;
+            species armario_repuestos aspect: closet_aspect;
+            species sensor aspect: sensor_aspect;
+            species robot_limpieza aspect: robot_aspect;
+            species suciedad aspect: suciedad_aspect;
         }
         
-        display "cleaning_stats" type: 2d {
+        display "estadísticas" type: 2d {
         	chart "Cantidad de suciedad" type:series position:{0.0,0.0} size:{1.0,0.5} {
-				data "Número de suciedades presentes" value:dirt_quantity color:#grey;
+				data "Número de suciedades presentes" value:suciedad_cantidad color:#grey;
 			}
+			// aquí otro chart
         }
     }
 }

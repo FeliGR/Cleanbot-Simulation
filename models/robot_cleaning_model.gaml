@@ -24,7 +24,7 @@ global torus: false {
     geometry grid_shape <- rectangle(size, size);
     int cycles <- 0;
     int total_cycles <- 0;
-    int cycles_to_pause <- 100000;    // ciclos para pausar la simulación
+    int cycles_to_pause <- 1000000;    // ciclos para pausar la simulación
     bool simulation_over <- false;
 
 	/**
@@ -33,15 +33,30 @@ global torus: false {
      * - num_sensors: Número de sensores.
      * - num_armarios_repuestos: Número de armarios de repuestos.
      * - num_estacion_cargas: Número de estaciones de carga.
-     * - suciedad_cantidad: Cantidad inicial de suciedad.
+     * - cantidad_suciedad: Cantidad inicial de suciedad.
      */
     int num_robots <- 3;    // número de robots
     //int num_robots <- 4 min: 1 max: 10 parameter: true;    // prueba
     int num_sensors <- 1;
     int num_armarios_repuestos <- 1;
     int num_estacion_cargas <- 1;
-    int suciedad_cantidad <- 3;
-    float robot_speed <- 2.0 min: 0.1 max: 10.0 parameter: true;
+    int cantidad_suciedad <- 3;
+    list<float> suciedad_acum <- [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // no hemos encontrado una función para generar vectores de ceros
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // y en esta sección no deja implementar loops
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0];  // para el gráfico
+    float media_suciedad <- mean(suciedad_acum);                  // para el gráfico
+    float robot_speed <- 2.0 min: 0.1 max: 10.0 parameter: true;  // parámetro interactivo
+    
+    int num_polvo <- 0;    // para los gráficos
+    int num_liquido <- 0;  // para los gráficos
+    int num_basura <- 0;   // para los gráficos
     
     // Control de generación de suciedad
     int suciedad_generation_interval <- 15;    // 15 queda bien con 4 robots
@@ -121,7 +136,7 @@ global torus: false {
 	    }
 	    
 	    create species: robot_limpieza number: num_robots;
-	    create species: suciedad number: suciedad_cantidad;
+	    create species: suciedad number: cantidad_suciedad;
 	}
     
     /**
@@ -134,6 +149,16 @@ global torus: false {
     }
     
     /**
+     * Reflex: contador_suciedad
+     * va actualizando la media móvil
+     */
+    reflex contador_suciedad_acum {
+        suciedad_acum <- suciedad_acum + cantidad_suciedad;      // añadir el nuevo valor de cantidad de suciedad
+        remove from:suciedad_acum index:0;                       // eliminar el valor más antiguo
+        media_suciedad <- mean(suciedad_acum);                   // calcular la media
+    }
+    
+    /**
      * Reflex: generate_suciedad
      * Crea suciedad cada cierto número de ciclos.
      */
@@ -141,7 +166,7 @@ global torus: false {
         if (total_cycles - last_suciedad_generation >= suciedad_generation_interval) {
             last_suciedad_generation <- total_cycles;
             create species: suciedad number: 1;
-            suciedad_cantidad <- suciedad_cantidad + 1;
+            cantidad_suciedad <- cantidad_suciedad + 1;
         }
     }
 
@@ -710,11 +735,20 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
 	            write "\n";
 	            loop suciedad_instance over: species(suciedad) {
 	                if (suciedad_instance.location = suciedad_location) {
+	                	// se actualiza la cantidad de suciedad
+	                    cantidad_suciedad <- cantidad_suciedad - 1;
+	                    // se actualiza el tipo de la suciedad
+	                    if (suciedad_instance.type = "polvo") {
+				            num_polvo <- num_polvo - 1;
+				        } else if (suciedad_instance.type = "liquido") {
+				            num_liquido <- num_liquido - 1;
+				        } else if (suciedad_instance.type = "basura") {
+				            num_basura <- num_basura - 1;
+				        }
+				        // se elimina la suciedad
 	                    ask suciedad_instance {
 	                        do die;
 	                    }
-	                    suciedad_cantidad <- suciedad_cantidad - 1;
-	                    break;
 	                }
 	            }
 	
@@ -871,10 +905,13 @@ species suciedad {   // NO CAMBIAR GENERACIÓN ALEATORIA DE SUCIEDAD, QUE SI NO 
         type <- one_of(["polvo", "liquido", "basura"]);
         if (type = "polvo") {
             suciedad_color <- rgb("#a6a6a6");
+            num_polvo <- num_polvo + 1;
         } else if (type = "liquido") {
             suciedad_color <- rgb("#69a1ff");
+            num_liquido <- num_liquido + 1;
         } else if (type = "basura") {
             suciedad_color <- rgb("#aa8222");
+            num_basura <- num_basura + 1;
         }
     }
 
@@ -882,7 +919,7 @@ species suciedad {   // NO CAMBIAR GENERACIÓN ALEATORIA DE SUCIEDAD, QUE SI NO 
      * Aspecto visual: Pequeño cuadrado coloreado según el tipo de suciedad.
      */
     aspect name: suciedad_aspect {
-        draw geometry: square(5) color: suciedad_color at: location;
+        draw geometry: square(4) color: suciedad_color at: location;
     }
 }
 
@@ -903,8 +940,14 @@ experiment simulacion_limpieza type: gui {
         
         display "estadísticas" type: 2d {
         	chart "Cantidad de suciedad" type:series position:{0.0,0.0} size:{1.0,0.5} {
-				data "Número de suciedades presentes" value:suciedad_cantidad color:#grey;
+        		data "Media móvil (50 últimos ciclos)" value:media_suciedad color:#red;
+				data "Número de suciedades presentes" value:cantidad_suciedad color:#grey;
 			}
+			chart "Tipo de suciedad" type: pie position:{0.5,0.5} size:{0.5,0.5} {
+				data "Polvo" value: num_polvo color: rgb("#a6a6a6");
+				data "Líquido" value: num_liquido color: rgb("#69a1ff");
+				data "Basura" value: num_basura color: rgb("#aa8222");
+            }
 			// aquí otro chart
         }
     }

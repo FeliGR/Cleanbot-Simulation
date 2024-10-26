@@ -1,10 +1,10 @@
 /**
- * Name: robot_limpieza_model
- * Author: 
+ * Nombre: robot_limpieza_modelo
+ * Autores: 
  * 	- Felipe Guzmán Rodríguez
  * 	- Pablo Díaz-Masa Valencia
  *
- * Description:
+ * Descripción:
  * Este modelo simula un entorno donde robots de limpieza, sensores, armarios de repuestos y estaciones de carga interactúan para mantener la limpieza.
  */
 
@@ -12,13 +12,14 @@ model robot_limpieza_model
 
 global torus: false {
 	
-    float size <- 100.0;
-    geometry grid_shape <- rectangle(size, size);
-    int cycles <- 0;
-    int total_cycles <- 0;
-    int cycles_to_pause <- 1000000;
-    bool simulation_over <- false;
+	// Parámetros Globales
+    float tamano <- 100.0;
+    int ciclos <- 0;
+    int ciclos_totales <- 0;
+    int ciclos_para_pausar <- 1000000;
+    bool simulacion_finalizada <- false;
 
+	// Parámetros de la Simulación
     int num_robots <- 4 min: 1 max: 10 parameter: true;
     int num_sensors <- 1;
     int num_armarios_repuestos <- 1;
@@ -36,44 +37,48 @@ global torus: false {
     	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     	                          
     float media_suciedad <- mean(suciedad_acum); 
-    float robot_speed <- 2.0 min: 0.1 max: 10.0 parameter: true;
+    float velocidad_robot <- 2.0 min: 0.1 max: 10.0 parameter: true;
     
+    // Contadores de tipos de suciedad
     int num_polvo <- 0;
     int num_liquido <- 0;
     int num_basura <- 0;
     
-    int suciedad_generation_interval <- 15;
-    int last_suciedad_generation <- 0;
+    int intervalo_generacion_suciedad <- 15;
+    int ultima_generacion_suciedad <- 0;
 
-    float radius <- 23.6;
+	// Radio de detección de los sensores
+    float radio <- 23.6;
 
-    string Robot_role <- "Robot";
-    string Sensor_role <- "Sensor";
-    string EstacionCarga_role <- "EstacionCarga";
-    string ArmarioRepuestos_role <- "ArmarioRepuestos";
-    string suciedad_role <- "suciedad";
+	// Roles
+    string rol_robot <- "Robot";
+    string rol_sensor <- "Sensor";
+    string rol_estacion_carga <- "EstacionCarga";
+    string rol_armario_repuestos <- "ArmarioRepuestos";
 
-    string recharge_action <- "Recharge";
-    string supply_recurso_action <- "Supply_recurso";
+    string recargar_accion <- "Recharge";
 
+	// Conceptos y Predicados
     string suciedad_detectada <- "suciedad_detectada";
-    string recurso_needed <- "recurso_Needed";
-    string recurso_provided <- "recurso_Provided";
-    string bateria_low <- "bateria_Low";
+    string recurso_proporcionado <- "recurso_Provided";
 
-    string suciedad_type <- "suciedad_Type";
-    string location_concept <- "Location";
-    string recurso_type <- "recurso_Type";
+    string tipo_suciedad <- "suciedad_Type";
+    string ubicacion_concepto <- "Location";
+    string tipo_recurso <- "recurso_Type";
   
-	 init {
-	 	create species: df number: 1;
+  	/**
+     * Inicialización global:
+     * - Crea agentes del directorio de facilitación (DF), estaciones de carga, armarios de repuestos, sensores, robots y suciedad.
+     */
+	init {
+		create species: df number: 1;
 	    create species: estacion_carga number: num_estaciones_carga;
 	    create species: armario_repuestos number: num_armarios_repuestos;
 
 	    loop i from: 0 to: 2 {
 	        loop j from: 0 to: 2 {
 	            create species: sensor number: 1 {
-	                location <- {(size / 3) * (i + 0.5), (size / 3) * (j + 0.5)};
+	                location <- {(tamano / 3) * (i + 0.5), (tamano / 3) * (j + 0.5)};
 	            }
 	        }
 	    }
@@ -82,67 +87,97 @@ global torus: false {
 	    create species: suciedad number: cantidad_suciedad;
 	}
 
-    reflex counting {
-        cycles <- cycles + 1;
-        total_cycles <- total_cycles + 1;
+	/**
+     * Reflexión de conteo de ciclos:
+     * - Incrementa los contadores de ciclos.
+     */
+    reflex contar {
+        ciclos <- ciclos + 1;
+        ciclos_totales <- ciclos_totales + 1;
     }
 
+	/**
+     * Reflexión para actualizar la media móvil de suciedad:
+     * - Actualiza la lista de suciedad acumulada y calcula la media.
+     */
     reflex contador_suciedad_acum {
         suciedad_acum <- suciedad_acum + cantidad_suciedad;
         remove from:suciedad_acum index:0;
         media_suciedad <- mean(suciedad_acum);
     }
 
-    reflex generate_suciedad {
-        if (total_cycles - last_suciedad_generation >= suciedad_generation_interval) {
-            last_suciedad_generation <- total_cycles;
+	/**
+     * Reflexión para generar suciedad:
+     * - Genera nueva suciedad en intervalos definidos.
+     */
+    reflex generar_suciedad {
+        if (ciclos_totales - ultima_generacion_suciedad >= intervalo_generacion_suciedad) {
+            ultima_generacion_suciedad <- ciclos_totales;
             create species: suciedad number: 1;
             cantidad_suciedad <- cantidad_suciedad + 1;
         }
     }
 
-    reflex pausing when: cycles = cycles_to_pause {
-        cycles <- 0;
-        write "Simulación pausada tras " + cycles_to_pause;
+	/**
+     * Reflexión para pausar la simulación:
+     * - Pausa la simulación después de un número específico de ciclos.
+     */
+    reflex pausar when: ciclos = ciclos_para_pausar {
+        ciclos <- 0;
+        write "Simulación pausada tras " + ciclos_para_pausar;
         do pause;
     }
 
-    reflex halting when: simulation_over {
+	/**
+     * Reflexión para finalizar la simulación:
+     * - Finaliza la simulación cuando se cumple cierta condición.
+     */
+    reflex finalizar when: simulacion_finalizada {
         write "Finalizando simulación";
         do die;
     }
 }
 
-grid my_grid width: size height: size neighbors: 8 {}
+grid mi_cuadricula width: tamano height: tamano neighbors: 8 {}
 
+/**
+ * Especie: df (Directorio de Facilitación)
+ * - Registra agentes y permite la búsqueda de agentes por rol.
+ */
 species df {
 
-    list<pair> yellow_pages <- [];
+    list<pair> paginas_amarillas <- [];
     
-    bool register(string the_role, agent the_agent) {
-        bool registered;
-        add the_role::the_agent to: yellow_pages;
-        return registered;
+    /**
+     * Método para registrar agentes en el DF.
+     */
+    bool registrar(string el_rol, agent el_agente) {
+        bool registrado;
+        add el_rol::el_agente to: paginas_amarillas;
+        return registrado;
     }
     
-    list<agent> search(string the_role) {
-        list<agent> found_ones <- [];
-        loop candidate over: yellow_pages {
-            if (candidate.key = the_role) {
-                add item: candidate.value to: found_ones;
+    /**
+     * Método para buscar agentes por rol.
+     */
+    list<agent> buscar(string el_rol) {
+        list<agent> encontrados <- [];
+        loop candidato over: paginas_amarillas {
+            if (candidato.key = el_rol) {
+                add item: candidato.value to: encontrados;
             }
         }
-        return found_ones;
+        return encontrados;
     }
 }
 
 species estacion_carga skills: [fipa] control: simple_bdi {
 	
     init {
-        location <- {size / 2 - 5, 45};
+        location <- {tamano / 2 - 5, 45};
         
         ask df {
-            bool registered <- register(EstacionCarga_role, myself);
+            bool registered <- registrar(rol_estacion_carga, myself);
         }
     }
 
@@ -153,9 +188,9 @@ species estacion_carga skills: [fipa] control: simple_bdi {
         do agree message: requestFromRobot contents: requestFromRobot.contents;
 
         list contents;
-        string predicado <- recurso_provided;
+        string predicado <- recurso_proporcionado;
         list concept_list <- [];
-        pair recurso_type_pair <- recurso_type::"bateria";
+        pair recurso_type_pair <- tipo_recurso::"bateria";
         pair cantidad_pair <- "cantidad"::100;
         add recurso_type_pair to: concept_list;
         add cantidad_pair to: concept_list;
@@ -178,41 +213,10 @@ species estacion_carga skills: [fipa] control: simple_bdi {
 species armario_repuestos skills: [fipa] control: simple_bdi {
 
     init {
-        location <- {size / 2 + 5, 45};
+        location <- {tamano / 2 + 5, 45};
         ask df {
-            bool registered <- register(ArmarioRepuestos_role, myself);
+            bool registrado <- registrar(rol_armario_repuestos, myself);
         }
-    }
-
-    reflex receive_request when: not empty(requests) {
-        message requestFromRobot <- requests[0];
-        write 'Armario de repuestos recibe una solicitud del robot con contenido ' + requestFromRobot.contents;
-        
-        do agree message: requestFromRobot contents: requestFromRobot.contents;
-
-        list contentlist <- list(requestFromRobot.contents);
-        map content_map <- contentlist at 0;
-        pair content_pair <- content_map.pairs at 0;
-        string accion <- string(content_pair.key);
-        list conceptos <- list(content_pair.value);
-        map conceptos_map <- conceptos at 0;
-        string requested_recurso <- string(conceptos_map[recurso_type]);
-        
-        int provided_cantidad <- 5;
-
-        list contents;
-        string predicado <- recurso_provided;
-        list concept_list <- [];
-        pair recurso_type_pair <- recurso_type::requested_recurso;
-        pair cantidad_pair <- "cantidad"::provided_cantidad;
-        add recurso_type_pair to: concept_list;
-        add cantidad_pair to: concept_list;
-        pair content_pair_resp <- predicado::concept_list;
-        add content_pair_resp to: contents;
-
-        do inform message: requestFromRobot contents: contents;
-
-        write "Armario de repuestos proporcionó " + provided_cantidad + " unidades de " + requested_recurso + " al robot.";
     }
 
     aspect closet_aspect {
@@ -229,7 +233,7 @@ species sensor skills: [fipa] control: simple_bdi {
     
     init {
         ask df {
-            bool registered <- register(Sensor_role, myself);
+            bool registrado <- registrar(rol_sensor, myself);
         }
     }
 
@@ -239,7 +243,7 @@ species sensor skills: [fipa] control: simple_bdi {
 	        
 	        float distance_to_suciedad <- sqrt((location.x - suciedad_location.x) ^ 2 + (location.y - suciedad_location.y) ^ 2);
 	
-	        if (distance_to_suciedad <= radius and not suciedad_instance.ya_detectada) {
+	        if (distance_to_suciedad <= radio and not suciedad_instance.ya_detectada) {
 				num_suciedades_detectadas <- num_suciedades_detectadas + 1;
 	            if (suciedad_instance.asignada_a_robot = nil) {
 	                robot_limpieza closest_robot <- nil;
@@ -263,8 +267,8 @@ species sensor skills: [fipa] control: simple_bdi {
 	                    string predicado <- suciedad_detectada;
 	                    list concept_list <- [];
 	
-	                    pair suciedad_type_pair <- suciedad_type::suciedad_instance.type;
-	                    pair location_pair <- location_concept::suciedad_location;
+	                    pair suciedad_type_pair <- tipo_suciedad::suciedad_instance.type;
+	                    pair location_pair <- ubicacion_concepto::suciedad_location;
 	                    add suciedad_type_pair to: concept_list;
 	                    add location_pair to: concept_list;
 	
@@ -284,7 +288,7 @@ species sensor skills: [fipa] control: simple_bdi {
 
     aspect sensor_aspect {
         draw geometry: circle(1) color: rgb("red") at: location; // Representar el sensor pequeño
-        draw circle(radius) color: rgb("#ffcfcf", 70) border: rgb("#ff2929", 130) at: location; // Dibujar el área de detección circular
+        draw circle(radio) color: rgb("#ffcfcf", 70) border: rgb("#ff2929", 130) at: location; // Dibujar el área de detección circular
     }
 }
 
@@ -294,90 +298,43 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
     list<agent> my_estaciones_carga;
     list<point> tareas_limpieza_pendientes <- [];
     list<point> assigned_suciedad_locations <- [];
+    
     bool limpieza_en_progreso <- false;
     bool carga_en_progreso <- false;
     int bateria_threshold <- 20;
     int initial_bateria <- 100;
-    int initial_bolsas <- 5;
-    int initial_detergente <- 100;
-    float speed <- robot_speed update: robot_speed;
+    float speed <- velocidad_robot update: velocidad_robot;
 
-    string at_armario_repuestos <- "at_armario_repuestos";
     string at_estacion_carga <- "at_estacion_carga";
-    string recurso_needed_belief <- "recurso_needed";
+    string recurso_needed_belief <- "recurso_proporcionado";
     string bateria_low_belief <- "bateria_low";
-    string my_armario_repuestos <- "my_armario_repuestos";
     string my_estacion_carga <- "my_estacion_carga";
     string bateria_level <- "bateria_level";
-    string bolsas_cantidad <- "bolsas_cantidad";
-    string detergente_level <- "detergente_level";
 
-    predicate request_recurso <- new_predicate("request_recurso");
+
     predicate request_carga <- new_predicate("request_carga");
-    predicate move_to_armario_repuestos <- new_predicate("move_to_armario_repuestos");
     predicate move_to_estacion_carga <- new_predicate("move_to_estacion_carga");
-    predicate move_to_random_location <- new_predicate("move_to_random_location");
     predicate limpiar_suciedad <- new_predicate("limpiar_suciedad");
 
     init {
-        location <- rnd(point(size, size));
+        location <- rnd(point(tamano, tamano));
 
         ask df {
-            bool registered <- register(Robot_role, myself);
-            myself.my_armarios_repuestos <- search(ArmarioRepuestos_role);
-            myself.my_estaciones_carga <- search(EstacionCarga_role);
+            bool registrado <- registrar(rol_robot, myself);
+            myself.my_armarios_repuestos <- buscar(rol_armario_repuestos);
+            myself.my_estaciones_carga <- buscar(rol_estacion_carga);
         }
 
         do add_belief(new_predicate(bateria_level, ["level"::initial_bateria]));
-        do add_belief(new_predicate(bolsas_cantidad, ["cantidad"::initial_bolsas]));
-        do add_belief(new_predicate(detergente_level, ["level"::initial_detergente]));
 
-        if (not empty(my_armarios_repuestos)) {
-            do add_belief(new_predicate(my_armario_repuestos, ["agent"::(my_armarios_repuestos at 0)]));
-        }
         if (not empty(my_estaciones_carga)) {
             do add_belief(new_predicate(my_estacion_carga, ["agent"::(my_estaciones_carga at 0)]));
         }
     }
 
-
-    rule beliefs: [new_predicate(recurso_needed_belief)] when: not has_belief(new_predicate(at_armario_repuestos)) new_desire: move_to_armario_repuestos;
-
     rule beliefs: [new_predicate(bateria_low_belief)] when: not has_belief(new_predicate(at_estacion_carga)) new_desire: move_to_estacion_carga;
 
     rule when: (not empty(tareas_limpieza_pendientes) and not limpieza_en_progreso) new_desire: limpiar_suciedad;
-
-   	plan request_recurso intention: request_recurso {
-	    if (has_belief(new_predicate(at_armario_repuestos))) {
-	        if (has_belief(new_predicate(recurso_needed_belief))) {
-	            predicate pred_recurso_needed <- get_predicate(get_belief(new_predicate(recurso_needed_belief)));
-	            string recurso_type_needed <- string(pred_recurso_needed.values["type"]);
-	            write "Recurso necesario: " + recurso_type_needed;
-	
-	            do remove_belief(pred_recurso_needed);
-	            predicate pred_armario_repuestos <- get_predicate(get_belief(new_predicate(my_armario_repuestos)));
-	            agent el_armario_repuestos <- agent(pred_armario_repuestos.values["agent"]);
-	
-	            list contents;
-	            list concept_list <- [];
-	            pair recurso_type_pair <- recurso_type::recurso_type_needed;
-	            add recurso_type_pair to: concept_list;
-	            pair content_pair <- supply_recurso_action::concept_list;
-	            add content_pair to: contents;
-	
-	            do start_conversation to: [el_armario_repuestos] protocol: 'fipa-request' performative: 'request' contents: contents;
-	            write "Robot solicitando recurso " + recurso_type_needed + " al armario de repuestos.";
-	
-	            do remove_belief(new_predicate(recurso_needed_belief));
-	            do remove_intention(request_recurso);
-	            do remove_desire(request_recurso);
-	        } else {
-	            write "Robot no necesita más recursos. Eliminando la intención de reabastecimiento.";
-	            do remove_intention(request_recurso);
-	        }
-	        do remove_belief(new_predicate(at_armario_repuestos));
-	    }
-	}
 
  	plan request_carga intention: request_carga {
 	    if (has_belief(new_predicate(at_estacion_carga)) and not carga_en_progreso) {
@@ -385,7 +342,7 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
 	        agent la_estacion_carga <- agent(pred_estacion_carga.values["agent"]);
 	
 	        list contents;
-	        pair content_pair <- recharge_action::[];
+	        pair content_pair <- recargar_accion::[];
 	        add content_pair to: contents;
 	
 	        do start_conversation to: [la_estacion_carga] protocol: 'fipa-request' performative: 'request' contents: contents;
@@ -397,41 +354,7 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
 	        do remove_belief(new_predicate(bateria_low_belief));
 	    }
 	}
- 	
-    plan move_to_armario_repuestos intention: move_to_armario_repuestos {
-    	predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
-    	int bateria_actual <- int(pred_bateria.values["level"]);
-    	
-        if (carga_en_progreso) {
-            return;
-        }
-
-        predicate pred_my_armario_repuestos <- get_predicate(get_belief(new_predicate(my_armario_repuestos)));
-        agent el_armario_repuestos <- agent(pred_my_armario_repuestos.values["agent"]);
-        point target_location <- el_armario_repuestos.location;
-
-        float distance <- sqrt((location.x - target_location.x) ^ 2 + (location.y - target_location.y) ^ 2);
-
-        if (distance > 0.5) {
-            float step_size <- min(speed, distance);
-            float direction_x <- (target_location.x - location.x) / distance;
-            float direction_y <- (target_location.y - location.y) / distance;
-
-            point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
-            do goto target: next_step;
-            
-            bateria_actual <- bateria_actual - 1;
-            do remove_belief(pred_bateria);
-	        do add_belief(new_predicate(bateria_level, ["level"::bateria_actual]));
-	        
-        } else {
-            do add_belief(new_predicate(at_armario_repuestos));
-            do add_desire(request_recurso);
-            do remove_intention(move_to_armario_repuestos);
-            do remove_desire(move_to_armario_repuestos);
-        }
-    }
-
+ 
     plan move_to_estacion_carga intention: move_to_estacion_carga {
     	predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
     	int bateria_actual <- int(pred_bateria.values["level"]);
@@ -562,37 +485,13 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
 	
 	    pair content_pair <- informMessage.contents[0];
 	
-	    if (content_pair.key = recurso_provided) {
+	    if (content_pair.key = recurso_proporcionado) {
 	        list conceptos_list <- content_pair.value;
 	        map conceptos_map <- map(conceptos_list);
-	        string recurso_provisto <- string(conceptos_map[recurso_type]);
+	        string recurso_provisto <- string(conceptos_map[tipo_recurso]);
 	        int provided_cantidad <- int(conceptos_map["cantidad"]);
 	
-	        if (recurso_provisto = "detergente") {
-	            predicate pred_detergente <- get_predicate(get_belief(new_predicate(detergente_level)));
-	            int actual_detergente <- int(pred_detergente.values["level"]);
-	            actual_detergente <- actual_detergente + provided_cantidad;
-	            do remove_belief(pred_detergente);
-	            do add_belief(new_predicate(detergente_level, ["level"::actual_detergente]));
-	            write "Robot actualizó su nivel de detergentee a " + actual_detergente;
-	
-	            do remove_belief(new_predicate(at_armario_repuestos));
-	            do remove_intention(request_recurso);
-	            do remove_desire(request_recurso);
-	            
-	        } else if (recurso_provisto = "trash_bolsas") {
-	            predicate pred_bolsas <- get_predicate(get_belief(new_predicate(bolsas_cantidad)));
-	            int actual_bolsas <- int(pred_bolsas.values["cantidad"]);
-	            actual_bolsas <- actual_bolsas + provided_cantidad;
-	            do remove_belief(pred_bolsas);
-	            do add_belief(new_predicate(bolsas_cantidad, ["cantidad"::actual_bolsas]));
-	            write "Robot actualizó su cantidad de bolsas a " + actual_bolsas;
-	
-	            do remove_belief(new_predicate(at_armario_repuestos));
-	            do remove_intention(request_recurso);
-	            do remove_desire(request_recurso);
-	            
-	        } else if (recurso_provisto = "bateria") {
+	        if (recurso_provisto = "bateria") {
 	            predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
 	            do remove_belief(pred_bateria);
 	            do add_belief(new_predicate(bateria_level, ["level"::initial_bateria]));
@@ -612,7 +511,6 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
 	        }
 	    }
 	}
-	
 
     reflex receive_request when: not empty(requests) {
         message requestMessage <- requests[0];
@@ -621,7 +519,7 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
         if (content_pair.key = suciedad_detectada) {
             list conceptos_list <- content_pair.value;
             map conceptos_map <- map(conceptos_list);
-            point suciedad_location <- point(conceptos_map[location_concept]);
+            point suciedad_location <- point(conceptos_map[ubicacion_concepto]);
 
             loop suciedad_instance over: species(suciedad) {
                 if (suciedad_instance.location = suciedad_location) {
@@ -680,12 +578,12 @@ species suciedad {
 experiment simulacion_limpieza type: gui {
 	
 	parameter "Número de robots" var:num_robots category:"Parámetros iniciales";
-	parameter "Velocidad de los robots" var:robot_speed category:"Parámetros interactivos";
-	parameter "Cada cuántos ciclos se genera suciedad" var:suciedad_generation_interval category:"Parámetros interactivos";
+	parameter "Velocidad de los robots" var:velocidad_robot category:"Parámetros interactivos";
+	parameter "Cada cuántos ciclos se genera suciedad" var:intervalo_generacion_suciedad category:"Parámetros interactivos";
 	
     output {
         display mapa type: java2D {
-            grid my_grid border: rgb("#C4C4C4");
+            grid mi_cuadricula border: rgb("#C4C4C4");
             species estacion_carga aspect: estacion_aspect;
             species armario_repuestos aspect: closet_aspect;
             species sensor aspect: sensor_aspect;

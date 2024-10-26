@@ -177,6 +177,10 @@ species df {
  */
 species estacion_carga skills: [fipa] control: simple_bdi {
 	
+	/**
+     * Inicialización:
+     * - Establece la ubicación y registra la estación en el DF.
+     */
     init {
         location <- {tamano / 2 - 5, 45};
         
@@ -210,6 +214,10 @@ species estacion_carga skills: [fipa] control: simple_bdi {
         write "Estación de carga proporcionó recarga de batería completa al robot.";
     }
 
+	/**
+     * Aspecto visual:
+     * - Representa la estación de carga como un cuadrado verde con las iniciales "EC".
+     */
     aspect estacion_aspecto {
         draw geometry: square(5) color: rgb("green");
         point pt <- location;
@@ -218,8 +226,16 @@ species estacion_carga skills: [fipa] control: simple_bdi {
     }
 }
 
+/**
+ * Especie: armario_repuestos
+ * - Representa un armario que proporciona recursos a los robots.
+ */
 species armario_repuestos skills: [fipa] control: simple_bdi {
 
+	/**
+     * Inicialización:
+     * - Establece la ubicación y registra el armario en el DF.
+     */
     init {
         location <- {tamano / 2 + 5, 45};
         ask df {
@@ -227,7 +243,11 @@ species armario_repuestos skills: [fipa] control: simple_bdi {
         }
     }
 
-    aspect closet_aspect {
+	/**
+     * Aspecto visual:
+     * - Representa el armario como un rectángulo naranja con las iniciales "AR".
+     */
+    aspect armario_aspecto {
         draw geometry: rectangle(10, 4) color: rgb("orange");
         point pt <- location;
 		point pt2 <- {pt.x-2, pt.y+1};
@@ -593,7 +613,7 @@ experiment simulacion_limpieza type: gui {
         display mapa type: java2D {
             grid mi_cuadricula border: rgb("#C4C4C4");
             species estacion_carga aspect: estacion_aspecto;
-            species armario_repuestos aspect: closet_aspect;
+            species armario_repuestos aspect: armario_aspecto;
             species sensor aspect: sensor_aspect;
             species robot_limpieza aspect: robot_aspect;
             species suciedad aspect: suciedad_aspect;

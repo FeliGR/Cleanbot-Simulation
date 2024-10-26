@@ -171,6 +171,10 @@ species df {
     }
 }
 
+/**
+ * Especie: estacion_carga
+ * - Representa una estación de carga que puede recargar la batería de los robots.
+ */
 species estacion_carga skills: [fipa] control: simple_bdi {
 	
     init {
@@ -181,28 +185,32 @@ species estacion_carga skills: [fipa] control: simple_bdi {
         }
     }
 
-    reflex receive_request when: not empty(requests) {
-        message requestFromRobot <- requests[0];
-        write 'Estación de carga recibe una solicitud del robot con contenido ' + requestFromRobot.contents;
+	/**
+     * Reflexión: recibir_solicitud
+     * - Procesa solicitudes de recarga de los robots y proporciona la batería.
+     */
+    reflex recibir_solicitud when: not empty(requests) {
+        message solicitud_del_robot <- requests[0];
+        write 'Estación de carga recibe una solicitud del robot con contenido ' + solicitud_del_robot.contents;
        
-        do agree message: requestFromRobot contents: requestFromRobot.contents;
+        do agree message: solicitud_del_robot contents: solicitud_del_robot.contents;
 
-        list contents;
+        list contenidos;
         string predicado <- recurso_proporcionado;
-        list concept_list <- [];
-        pair recurso_type_pair <- tipo_recurso::"bateria";
-        pair cantidad_pair <- "cantidad"::100;
-        add recurso_type_pair to: concept_list;
-        add cantidad_pair to: concept_list;
-        pair content_pair_resp <- predicado::concept_list;
-        add content_pair_resp to: contents;
+        list lista_conceptos <- [];
+        pair par_tipo_recurso <- tipo_recurso::"bateria";
+        pair par_cantidad <- "cantidad"::100;
+        add par_tipo_recurso to: lista_conceptos;
+        add par_cantidad to: lista_conceptos;
+        pair par_contenido_resp <- predicado::lista_conceptos;
+        add par_contenido_resp to: contenidos;
 
-        do inform message: requestFromRobot contents: contents;
+        do inform message: solicitud_del_robot contents: contenidos;
 
         write "Estación de carga proporcionó recarga de batería completa al robot.";
     }
 
-    aspect estacion_aspect {
+    aspect estacion_aspecto {
         draw geometry: square(5) color: rgb("green");
         point pt <- location;
 		point pt2 <- {pt.x-2, pt.y+1};
@@ -584,7 +592,7 @@ experiment simulacion_limpieza type: gui {
     output {
         display mapa type: java2D {
             grid mi_cuadricula border: rgb("#C4C4C4");
-            species estacion_carga aspect: estacion_aspect;
+            species estacion_carga aspect: estacion_aspecto;
             species armario_repuestos aspect: closet_aspect;
             species sensor aspect: sensor_aspect;
             species robot_limpieza aspect: robot_aspect;

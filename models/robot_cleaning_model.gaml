@@ -255,68 +255,90 @@ species armario_repuestos skills: [fipa] control: simple_bdi {
     }
 }
 
+/**
+ * Especie: sensor
+ * - Representa sensores que detectan suciedad y asignan tareas a los robots.
+ */
 species sensor skills: [fipa] control: simple_bdi {
-	
-	int num_suciedades_detectadas <- 0;
     
+    // Atributo
+    int num_suciedades_detectadas <- 0;
+    
+    /**
+     * Inicialización:
+     * - Registra el sensor en el DF.
+     */
     init {
         ask df {
             bool registrado <- registrar(rol_sensor, myself);
         }
     }
 
-	reflex detect_suciedad {
-	    loop suciedad_instance over: species(suciedad) {
-	        point suciedad_location <- suciedad_instance.location;
-	        
-	        float distance_to_suciedad <- sqrt((location.x - suciedad_location.x) ^ 2 + (location.y - suciedad_location.y) ^ 2);
-	
-	        if (distance_to_suciedad <= radio and not suciedad_instance.ya_detectada) {
-				num_suciedades_detectadas <- num_suciedades_detectadas + 1;
-	            if (suciedad_instance.asignada_a_robot = nil) {
-	                robot_limpieza closest_robot <- nil;
-	                float closest_distance <- 1000000.0;
-	
-	                loop robot over: species(robot_limpieza) {
-	                    if (not robot.limpieza_en_progreso and not robot.carga_en_progreso) {
-	                        float distance_to_robot <- sqrt((robot.location.x - suciedad_location.x) ^ 2 + (robot.location.y - suciedad_location.y) ^ 2);
-	                        
-	                        if (distance_to_robot < closest_distance) {
-	                            closest_robot <- robot;
-	                            closest_distance <- distance_to_robot;
-	                        }
-	                    }
-	                }
-	
-	                if (closest_robot != nil) {
-	                    write "El sensor está enviando una solicitud de limpieza a " + closest_robot.name + " para la ubicación: " + suciedad_location;
-	
-	                    list contents;
-	                    string predicado <- suciedad_detectada;
-	                    list concept_list <- [];
-	
-	                    pair suciedad_type_pair <- tipo_suciedad::suciedad_instance.type;
-	                    pair location_pair <- ubicacion_concepto::suciedad_location;
-	                    add suciedad_type_pair to: concept_list;
-	                    add location_pair to: concept_list;
-	
-	                    pair content_pair_resp <- predicado::concept_list;
-	                    add content_pair_resp to: contents;
-	
-	                    do start_conversation to: [closest_robot] protocol: 'fipa-request' performative: 'request' contents: contents;
-	
-	                    suciedad_instance.asignada_a_robot <- closest_robot;
-	                    suciedad_instance.ya_detectada <- true;
-	                    suciedad_instance.detectada_por_sensor <- self;
-	                }
-	            }
-	        }
-	    }
-	}
+    /**
+     * Reflexión: detectar_suciedad
+     * - Detecta suciedad en su radio de alcance y asigna tareas a los robots disponibles.
+     */
+    reflex detectar_suciedad {
+        loop instancia_suciedad over: species(suciedad) {
+            point ubicacion_suciedad <- instancia_suciedad.location;
+            
+            float distancia_a_suciedad <- sqrt((location.x - ubicacion_suciedad.x) ^ 2 + (location.y - ubicacion_suciedad.y) ^ 2);
 
-    aspect sensor_aspect {
-        draw geometry: circle(1) color: rgb("red") at: location; // Representar el sensor pequeño
-        draw circle(radio) color: rgb("#ffcfcf", 70) border: rgb("#ff2929", 130) at: location; // Dibujar el área de detección circular
+            if (distancia_a_suciedad <= radio and not instancia_suciedad.ya_detectada) {
+                num_suciedades_detectadas <- num_suciedades_detectadas + 1;
+                if (instancia_suciedad.asignada_a_robot = nil) {
+                    robot_limpieza robot_mas_cercano <- nil;
+                    float distancia_mas_cercana <- 1000000.0;
+
+                    // Buscar el robot más cercano y disponible
+                    loop robot over: species(robot_limpieza) {
+                        if (not robot.limpieza_en_progreso and not robot.carga_en_progreso) {
+                            float distancia_al_robot <- sqrt((robot.location.x - ubicacion_suciedad.x) ^ 2 + (robot.location.y - ubicacion_suciedad.y) ^ 2);
+                            
+                            if (distancia_al_robot < distancia_mas_cercana) {
+                                robot_mas_cercano <- robot;
+                                distancia_mas_cercana <- distancia_al_robot;
+                            }
+                        }
+                    }
+
+                    // Si se encuentra un robot, asignar la tarea
+                    if (robot_mas_cercano != nil) {
+                        write "El sensor está enviando una solicitud de limpieza a " + robot_mas_cercano.name + " para la ubicación: " + ubicacion_suciedad;
+
+                        // Preparar contenido del mensaje
+                        list contenidos;
+                        string predicado <- suciedad_detectada;
+                        list lista_conceptos <- [];
+
+                        pair par_tipo_suciedad <- tipo_suciedad::instancia_suciedad.type;
+                        pair par_ubicacion <- ubicacion_concepto::ubicacion_suciedad;
+                        add par_tipo_suciedad to: lista_conceptos;
+                        add par_ubicacion to: lista_conceptos;
+
+                        pair par_contenido_resp <- predicado::lista_conceptos;
+                        add par_contenido_resp to: contenidos;
+
+                        // Enviar solicitud al robot
+                        do start_conversation to: [robot_mas_cercano] protocol: 'fipa-request' performative: 'request' contents: contenidos;
+
+                        // Actualizar estado de la suciedad
+                        instancia_suciedad.asignada_a_robot <- robot_mas_cercano;
+                        instancia_suciedad.ya_detectada <- true;
+                        instancia_suciedad.detectada_por_sensor <- self;
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Aspecto visual:
+     * - Representa el sensor como un pequeño círculo rojo con un área de detección.
+     */
+    aspect sensor_aspecto {
+        draw geometry: circle(1) color: rgb("red") at: location;
+        draw circle(radio) color: rgb("#ffcfcf", 70) border: rgb("#ff2929", 130) at: location;
     }
 }
 
@@ -325,7 +347,6 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
     list<agent> my_armarios_repuestos;
     list<agent> my_estaciones_carga;
     list<point> tareas_limpieza_pendientes <- [];
-    list<point> assigned_suciedad_locations <- [];
     
     bool limpieza_en_progreso <- false;
     bool carga_en_progreso <- false;
@@ -338,7 +359,6 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
     string bateria_low_belief <- "bateria_low";
     string my_estacion_carga <- "my_estacion_carga";
     string bateria_level <- "bateria_level";
-
 
     predicate request_carga <- new_predicate("request_carga");
     predicate move_to_estacion_carga <- new_predicate("move_to_estacion_carga");
@@ -576,35 +596,53 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
     }
 }
 
+/**
+ * Especie: suciedad
+ * - Representa diferentes tipos de suciedad que deben ser limpiados.
+ */
 species suciedad {
 
+    // Atributos
     string type;
     bool ya_detectada <- false;
-    rgb suciedad_color;
+    rgb color_suciedad;
     agent detectada_por_sensor <- nil;
     agent asignada_a_robot <- nil;
-	
+
+    /**
+     * Inicialización:
+     * - Asigna un tipo de suciedad y actualiza los contadores globales.
+     */
     init {
         type <- one_of(["polvo", "liquido", "basura"]);
         if (type = "polvo") {
-            suciedad_color <- rgb("#a6a6a6");
+            color_suciedad <- rgb("#a6a6a6");
             num_polvo <- num_polvo + 1;
         } else if (type = "liquido") {
-            suciedad_color <- rgb("#69a1ff");
+            color_suciedad <- rgb("#69a1ff");
             num_liquido <- num_liquido + 1;
         } else if (type = "basura") {
-            suciedad_color <- rgb("#aa8222");
+            color_suciedad <- rgb("#aa8222");
             num_basura <- num_basura + 1;
         }
     }
 
-    aspect name: suciedad_aspect {
-        draw geometry: square(4) color: suciedad_color at: location;
+    /**
+     * Aspecto visual:
+     * - Representa la suciedad como un pequeño cuadrado de color según su tipo.
+     */
+    aspect suciedad_aspecto {
+        draw geometry: square(4) color: color_suciedad at: location;
     }
 }
 
+/**
+ * Experimento: simulacion_limpieza
+ * - Define los parámetros y salidas de la simulación.
+ */
 experiment simulacion_limpieza type: gui {
 	
+	// Parámetros interactivos
 	parameter "Número de robots" var:num_robots category:"Parámetros iniciales";
 	parameter "Velocidad de los robots" var:velocidad_robot category:"Parámetros interactivos";
 	parameter "Cada cuántos ciclos se genera suciedad" var:intervalo_generacion_suciedad category:"Parámetros interactivos";
@@ -614,9 +652,9 @@ experiment simulacion_limpieza type: gui {
             grid mi_cuadricula border: rgb("#C4C4C4");
             species estacion_carga aspect: estacion_aspecto;
             species armario_repuestos aspect: armario_aspecto;
-            species sensor aspect: sensor_aspect;
+            species sensor aspect: sensor_aspecto;
             species robot_limpieza aspect: robot_aspect;
-            species suciedad aspect: suciedad_aspect;
+            species suciedad aspect: suciedad_aspecto;
         }
         
         display "estadísticas" type: 2d {

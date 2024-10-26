@@ -344,156 +344,177 @@ species sensor skills: [fipa] control: simple_bdi {
 
 species robot_limpieza skills: [moving, fipa] control: simple_bdi {
    
-    list<agent> my_armarios_repuestos;
-    list<agent> my_estaciones_carga;
+    // Atributos
+    list<agent> mis_armarios_repuestos;
+    list<agent> mis_estaciones_carga;
     list<point> tareas_limpieza_pendientes <- [];
-    
     bool limpieza_en_progreso <- false;
     bool carga_en_progreso <- false;
-    int bateria_threshold <- 20;
-    int initial_bateria <- 100;
+    int umbral_bateria <- 20;
+    int bateria_inicial <- 100;
     float speed <- velocidad_robot update: velocidad_robot;
 
-    string at_estacion_carga <- "at_estacion_carga";
-    string recurso_needed_belief <- "recurso_proporcionado";
-    string bateria_low_belief <- "bateria_low";
-    string my_estacion_carga <- "my_estacion_carga";
-    string bateria_level <- "bateria_level";
+	// Creencias
+    string creencia_en_estacion_carga <- "at_estacion_carga";
+    string creencia_bateria_baja <- "bateria_low";
+    string creencia_estacion_carga <- "my_estacion_carga";
+    string creencia_nivel_bateria <- "bateria_level";
 
-    predicate request_carga <- new_predicate("request_carga");
-    predicate move_to_estacion_carga <- new_predicate("move_to_estacion_carga");
-    predicate limpiar_suciedad <- new_predicate("limpiar_suciedad");
+	// Deseos e Intenciones
+    predicate solicitar_carga <- new_predicate("request_carga");
+    predicate mover_a_estacion_carga <- new_predicate("move_to_estacion_carga");
+    predicate mover_limpiar_suciedad <- new_predicate("limpiar_suciedad");
 
+	/**
+     * Inicialización:
+     * - Establece la ubicación inicial, registra el robot en el DF y establece creencias iniciales.
+     */
     init {
         location <- rnd(point(tamano, tamano));
-
+        
         ask df {
             bool registrado <- registrar(rol_robot, myself);
-            myself.my_armarios_repuestos <- buscar(rol_armario_repuestos);
-            myself.my_estaciones_carga <- buscar(rol_estacion_carga);
+            myself.mis_armarios_repuestos <- buscar(rol_armario_repuestos);
+            myself.mis_estaciones_carga <- buscar(rol_estacion_carga);
         }
 
-        do add_belief(new_predicate(bateria_level, ["level"::initial_bateria]));
+        do add_belief(new_predicate(creencia_nivel_bateria, ["level"::bateria_inicial]));
 
-        if (not empty(my_estaciones_carga)) {
-            do add_belief(new_predicate(my_estacion_carga, ["agent"::(my_estaciones_carga at 0)]));
+        if (not empty(mis_estaciones_carga)) {
+            do add_belief(new_predicate(creencia_estacion_carga, ["agent"::(mis_estaciones_carga at 0)]));
         }
     }
 
-    rule beliefs: [new_predicate(bateria_low_belief)] when: not has_belief(new_predicate(at_estacion_carga)) new_desire: move_to_estacion_carga;
+	/**
+     * Reglas BDI:
+     * - Generan deseos basados en las creencias actuales.
+     */
+    rule beliefs: [new_predicate(creencia_bateria_baja)] when: not has_belief(new_predicate(creencia_en_estacion_carga)) new_desire: mover_a_estacion_carga;
 
-    rule when: (not empty(tareas_limpieza_pendientes) and not limpieza_en_progreso) new_desire: limpiar_suciedad;
+    rule when: (not empty(tareas_limpieza_pendientes) and not limpieza_en_progreso) new_desire: mover_limpiar_suciedad;
 
- 	plan request_carga intention: request_carga {
-	    if (has_belief(new_predicate(at_estacion_carga)) and not carga_en_progreso) {
-	        predicate pred_estacion_carga <- get_predicate(get_belief(new_predicate(my_estacion_carga)));
+	/**
+     * Plan: solicitar_carga
+     * - El robot solicita recarga de batería a la estación de carga.
+     */
+ 	plan solicitar_carga intention: solicitar_carga {
+	    if (has_belief(new_predicate(creencia_en_estacion_carga)) and not carga_en_progreso) {
+	        predicate pred_estacion_carga <- get_predicate(get_belief(new_predicate(creencia_estacion_carga)));
 	        agent la_estacion_carga <- agent(pred_estacion_carga.values["agent"]);
 	
-	        list contents;
-	        pair content_pair <- recargar_accion::[];
-	        add content_pair to: contents;
+	        list contenidos;
+	        pair par_contenido <- recargar_accion::[];
+	        add par_contenido to: contenidos;
 	
-	        do start_conversation to: [la_estacion_carga] protocol: 'fipa-request' performative: 'request' contents: contents;
+	        do start_conversation to: [la_estacion_carga] protocol: 'fipa-request' performative: 'request' contents: contenidos;
 	        write "\n";
 	        write "Robot solicitando recarga de batería a la estación de carga.";
 	
 	        carga_en_progreso <- true;
 	
-	        do remove_belief(new_predicate(bateria_low_belief));
+	        do remove_belief(new_predicate(creencia_bateria_baja));
 	    }
 	}
  
-    plan move_to_estacion_carga intention: move_to_estacion_carga {
-    	predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
+ 	/**
+     * Plan: mover_a_estacion_carga
+     * - El robot se mueve hacia la estación de carga.
+     */
+    plan mover_a_estacion_carga intention: mover_a_estacion_carga {
+    	predicate pred_bateria <- get_predicate(get_belief(new_predicate(creencia_nivel_bateria)));
     	int bateria_actual <- int(pred_bateria.values["level"]);
     	
         if (carga_en_progreso) {
             return;
         }
 
-        predicate pred_my_estacion_carga <- get_predicate(get_belief(new_predicate(my_estacion_carga)));
-        agent la_estacion_carga <- agent(pred_my_estacion_carga.values["agent"]);
-        point target_location <- la_estacion_carga.location;
+        predicate pred_mi_estacion_carga <- get_predicate(get_belief(new_predicate(creencia_estacion_carga)));
+        agent la_estacion_carga <- agent(pred_mi_estacion_carga.values["agent"]);
+        point ubicacion_objetivo <- la_estacion_carga.location;
 
-        float distance <- sqrt((location.x - target_location.x) ^ 2 + (location.y - target_location.y) ^ 2);
+        float distancia <- sqrt((location.x - ubicacion_objetivo.x) ^ 2 + (location.y - ubicacion_objetivo.y) ^ 2);
 
-        if (distance > 0.5) {
-            float step_size <- min(speed, distance);
-            float direction_x <- (target_location.x - location.x) / distance;
-            float direction_y <- (target_location.y - location.y) / distance;
+        if (distancia > 0.5) {
+            float tamano_paso <- min(speed, distancia);
+            float direccion_x <- (ubicacion_objetivo.x - location.x) / distancia;
+            float direccion_y <- (ubicacion_objetivo.y - location.y) / distancia;
 
-            point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
-            do goto target: next_step;
+            point siguiente_paso <- {location.x + direccion_x * tamano_paso, location.y + direccion_y * tamano_paso};
+            do goto target: siguiente_paso;
             
             bateria_actual <- bateria_actual - 1;
             do remove_belief(pred_bateria);
-	        do add_belief(new_predicate(bateria_level, ["level"::bateria_actual]));
+	        do add_belief(new_predicate(creencia_nivel_bateria, ["level"::bateria_actual]));
 
         } else {
-            do add_belief(new_predicate(at_estacion_carga));
-            do add_desire(request_carga);
-            do remove_intention(move_to_estacion_carga);
-            do remove_desire(move_to_estacion_carga);
+            do add_belief(new_predicate(creencia_en_estacion_carga));
+            do add_desire(solicitar_carga);
+            do remove_intention(mover_a_estacion_carga);
+            do remove_desire(mover_a_estacion_carga);
         }
     }
 
-	plan move_to_limpiar_suciedad intention: limpiar_suciedad {
+	/**	
+     * Plan: mover_limpiar_suciedad
+     * - El robot se mueve hacia la suciedad y la limpia.
+     */
+	plan mover_a_limpiar_suciedad intention: mover_limpiar_suciedad {
 	    if (carga_en_progreso) {
 	        return;
 	    }
 	
 	    if (not empty(tareas_limpieza_pendientes)) {
-	        predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
+	        predicate pred_bateria <- get_predicate(get_belief(new_predicate(creencia_nivel_bateria)));
 	        int bateria_actual <- int(pred_bateria.values["level"]);
 	        
-	        predicate pred_my_estacion_carga <- get_predicate(get_belief(new_predicate(my_estacion_carga)));
-	        agent la_estacion_carga <- agent(pred_my_estacion_carga.values["agent"]);
-	        point estacion_carga_location <- la_estacion_carga.location;
+	        predicate pred_mi_estacion_carga <- get_predicate(get_belief(new_predicate(creencia_estacion_carga)));
+	        agent la_estacion_carga <- agent(pred_mi_estacion_carga.values["agent"]);
+	        point ubicacion_estacion_carga <- la_estacion_carga.location;
 	
-	        float distance_to_estacion_carga <- sqrt((location.x - estacion_carga_location.x) ^ 2 + (location.y - estacion_carga_location.y) ^ 2);
+	        float distancia_a_estacion_carga <- sqrt((location.x - ubicacion_estacion_carga.x) ^ 2 + (location.y - ubicacion_estacion_carga.y) ^ 2);
 	
-	        int steps_necesarios <- int(ceil(distance_to_estacion_carga / speed));
+	        int pasos_necesarios <- int(ceil(distancia_a_estacion_carga / speed));
 	        
-	        if (steps_necesarios >= bateria_actual - 2) {
-	            do add_belief(new_predicate(bateria_low_belief));
-	            do add_desire(move_to_estacion_carga);
-	            do remove_intention(limpiar_suciedad);
+	        if (pasos_necesarios >= bateria_actual - 2) {
+	            do add_belief(new_predicate(creencia_bateria_baja));
+	            do add_desire(mover_a_estacion_carga);
+	            do remove_intention(mover_limpiar_suciedad);
 	            limpieza_en_progreso <- false;
 	            return;
 	        }
 	
-	        point suciedad_location <- tareas_limpieza_pendientes[0];
+	        point ubicacion_suciedad <- tareas_limpieza_pendientes[0];
 	
-	        float distance <- sqrt((location.x - suciedad_location.x) ^ 2 + (location.y - suciedad_location.y) ^ 2);
+	        float distancia <- sqrt((location.x - ubicacion_suciedad.x) ^ 2 + (location.y - ubicacion_suciedad.y) ^ 2);
 	
-	        if (distance > 0.5) {
-	            float step_size <- min(speed, distance);
-	            float direction_x <- (suciedad_location.x - location.x) / distance;
-	            float direction_y <- (suciedad_location.y - location.y) / distance;
+	        if (distancia > 0.5) {
+	            float tamano_paso <- min(speed, distancia);
+	            float direccion_x <- (ubicacion_suciedad.x - location.x) / distancia;
+	            float direccion_y <- (ubicacion_suciedad.y - location.y) / distancia;
 	
-	            point next_step <- {location.x + direction_x * step_size, location.y + direction_y * step_size};
-	            do goto target: next_step;
+	            point siguiente_paso <- {location.x + direccion_x * tamano_paso, location.y + direccion_y * tamano_paso};
+	            do goto target: siguiente_paso;
 	
 	            bateria_actual <- bateria_actual - 1;
 	            do remove_belief(pred_bateria);
-	            do add_belief(new_predicate(bateria_level, ["level"::bateria_actual]));
+	            do add_belief(new_predicate(creencia_nivel_bateria, ["level"::bateria_actual]));
 	
-	            if (bateria_actual <= bateria_threshold and not has_belief(new_predicate(bateria_low_belief))) {   // Esto hace falta??
-	                do add_belief(new_predicate(bateria_low_belief));
-	                do add_desire(move_to_estacion_carga);
+	            if (bateria_actual <= umbral_bateria and not has_belief(new_predicate(creencia_bateria_baja))) {   // Esto hace falta??
+	                do add_belief(new_predicate(creencia_bateria_baja));
+	                do add_desire(mover_a_estacion_carga);
 	            }
 	
 	            if (bateria_actual <= 0) {
-	                do remove_intention(limpiar_suciedad);
+	                do remove_intention(mover_limpiar_suciedad);
 	                limpieza_en_progreso <- false;
 	                return;
 	            }
 	
 	        } else {
-	            write "El robot limpia la suciedad en " + suciedad_location;
+	            write "El robot limpia la suciedad en " + ubicacion_suciedad;
 	            write "\n";
 	            loop suciedad_instance over: species(suciedad) {
-	                if (suciedad_instance.location = suciedad_location) {
+	                if (suciedad_instance.location = ubicacion_suciedad) {
 	                    cantidad_suciedad <- cantidad_suciedad - 1;
 	                    if (suciedad_instance.type = "polvo") {
 				            num_polvo <- num_polvo - 1;
@@ -508,73 +529,80 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
 	                }
 	            }
 	
-	            remove suciedad_location from: tareas_limpieza_pendientes;
-	            do remove_intention(limpiar_suciedad);
+	            remove ubicacion_suciedad from: tareas_limpieza_pendientes;
+	            do remove_intention(mover_limpiar_suciedad);
 	            limpieza_en_progreso <- false;
 	
 	            bateria_actual <- bateria_actual - 1;
 	            do remove_belief(pred_bateria);
-	            do add_belief(new_predicate(bateria_level, ["level"::bateria_actual]));
+	            do add_belief(new_predicate(creencia_nivel_bateria, ["level"::bateria_actual]));
 	
-	            if (bateria_actual <= bateria_threshold and not has_belief(new_predicate(bateria_low_belief))) {
-	                do add_belief(new_predicate(bateria_low_belief));
-	                do add_desire(move_to_estacion_carga);
+	            if (bateria_actual <= umbral_bateria and not has_belief(new_predicate(creencia_bateria_baja))) {
+	                do add_belief(new_predicate(creencia_bateria_baja));
+	                do add_desire(mover_a_estacion_carga);
 	            }
 	        }
 	    } else {
 	        limpieza_en_progreso <- false;
-	        do remove_intention(limpiar_suciedad);
+	        do remove_intention(mover_limpiar_suciedad);
 	    }
 	}
 
-	reflex receive_inform when: not empty(informs) {
-	    message informMessage <- informs[0];
-	    write 'Robot recibe un mensaje inform con contenido ' + informMessage.contents;
+	/**
+     * Reflexión: recibir_informacion
+     * - Procesa mensajes inform recibidos, actualizando creencias y recursos.
+     */
+	reflex recibir_informacion when: not empty(informs) {
+	    message mensaje_inform <- informs[0];
+	    write 'Robot recibe un mensaje inform con contenido ' + mensaje_inform.contents;
 	
-	    pair content_pair <- informMessage.contents[0];
+	    pair par_contenido <- mensaje_inform.contents[0];
 	
-	    if (content_pair.key = recurso_proporcionado) {
-	        list conceptos_list <- content_pair.value;
-	        map conceptos_map <- map(conceptos_list);
-	        string recurso_provisto <- string(conceptos_map[tipo_recurso]);
-	        int provided_cantidad <- int(conceptos_map["cantidad"]);
+	    if (par_contenido.key = recurso_proporcionado) {
+	        list lista_conceptos <- par_contenido.value;
+	        map mapa_conceptos <- map(lista_conceptos);
+	        string recurso_provisto <- string(mapa_conceptos[tipo_recurso]);
 	
 	        if (recurso_provisto = "bateria") {
-	            predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
+	            predicate pred_bateria <- get_predicate(get_belief(new_predicate(creencia_nivel_bateria)));
 	            do remove_belief(pred_bateria);
-	            do add_belief(new_predicate(bateria_level, ["level"::initial_bateria]));
-	            write "Robot ha completado la recarga de batería. Nivel de batería: " + initial_bateria;
+	            do add_belief(new_predicate(creencia_nivel_bateria, ["level"::bateria_inicial]));
+	            write "Robot ha completado la recarga de batería. Nivel de batería: " + bateria_inicial;
 	            write "\n";
 	
-	            do remove_belief(new_predicate(bateria_low_belief));
-	            do remove_belief(new_predicate(at_estacion_carga));
-	            do remove_intention(request_carga);
-	            do remove_desire(request_carga);
+	            do remove_belief(new_predicate(creencia_bateria_baja));
+	            do remove_belief(new_predicate(creencia_en_estacion_carga));
+	            do remove_intention(solicitar_carga);
+	            do remove_desire(solicitar_carga);
 	            carga_en_progreso <- false;
 	        }
 	
 	        if (not empty(tareas_limpieza_pendientes) and not limpieza_en_progreso) {
 	            limpieza_en_progreso <- true;
-	            do add_desire(limpiar_suciedad);
+	            do add_desire(mover_limpiar_suciedad);
 	        }
 	    }
 	}
 
-    reflex receive_request when: not empty(requests) {
-        message requestMessage <- requests[0];
-        pair content_pair <- requestMessage.contents[0];
+	/**
+     * Reflexión: recibir_solicitud
+     * - Procesa solicitudes de limpieza recibidas de los sensores.
+     */
+    reflex recibir_solicitud when: not empty(requests) {
+        message mensaje_solicitud <- requests[0];
+        pair par_contenido <- mensaje_solicitud.contents[0];
 
-        if (content_pair.key = suciedad_detectada) {
-            list conceptos_list <- content_pair.value;
-            map conceptos_map <- map(conceptos_list);
-            point suciedad_location <- point(conceptos_map[ubicacion_concepto]);
+        if (par_contenido.key = suciedad_detectada) {
+            list lista_conceptos <- par_contenido.value;
+            map mapa_conceptos <- map(lista_conceptos);
+            point ubicacion_suciedad <- point(mapa_conceptos[ubicacion_concepto]);
 
             loop suciedad_instance over: species(suciedad) {
-                if (suciedad_instance.location = suciedad_location) {
+                if (suciedad_instance.location = ubicacion_suciedad) {
                     if (suciedad_instance.asignada_a_robot = self) {
-                        if (not (tareas_limpieza_pendientes contains suciedad_location)) {
-                            add suciedad_location to: tareas_limpieza_pendientes;
-                            write "Robot recibe nueva solicitud de limpieza para la ubicación: " + suciedad_location;
+                        if (not (tareas_limpieza_pendientes contains ubicacion_suciedad)) {
+                            add ubicacion_suciedad to: tareas_limpieza_pendientes;
+                            write "Robot recibe nueva solicitud de limpieza para la ubicación: " + ubicacion_suciedad;
                         }
                     }
                 }
@@ -582,13 +610,17 @@ species robot_limpieza skills: [moving, fipa] control: simple_bdi {
         }
     }
     
-    aspect robot_aspect {
+    /**
+     * Aspecto visual:
+     * - Representa el robot como un círculo morado con el nivel de batería.
+     */
+    aspect robot_aspecto {
         draw circle(2.5) color: rgb("purple") at: location;
         
         point pt <- location;
 		point pt2 <- {pt.x-2, pt.y+1};
-	    if (has_belief(new_predicate(bateria_level))) {
-	        predicate pred_bateria <- get_predicate(get_belief(new_predicate(bateria_level)));
+	    if (has_belief(new_predicate(creencia_nivel_bateria))) {
+	        predicate pred_bateria <- get_predicate(get_belief(new_predicate(creencia_nivel_bateria)));
 	        int bateria_actual <- int(pred_bateria.values["level"]);
 	
 	        draw string(bateria_actual) color: #white font: font("Roboto", 16, #bold) at: pt2;
@@ -653,7 +685,7 @@ experiment simulacion_limpieza type: gui {
             species estacion_carga aspect: estacion_aspecto;
             species armario_repuestos aspect: armario_aspecto;
             species sensor aspect: sensor_aspecto;
-            species robot_limpieza aspect: robot_aspect;
+            species robot_limpieza aspect: robot_aspecto;
             species suciedad aspect: suciedad_aspecto;
         }
         

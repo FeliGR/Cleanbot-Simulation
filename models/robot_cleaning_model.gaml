@@ -16,7 +16,7 @@ global torus: false {
     float tamano <- 100.0;
     int ciclos <- 0;
     int ciclos_totales <- 0;
-    int ciclos_para_pausar <- 1000000;
+    int ciclos_para_pausar <- 5000;
     bool simulacion_finalizada <- false;
 
 	// Parámetros de la Simulación
@@ -25,10 +25,10 @@ global torus: false {
     int num_armarios_repuestos <- 1;
     int num_estaciones_carga <- 1;
     int cantidad_suciedad <- 3;
-    list<float> suciedad_acum <- [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    list<float> suciedad_acum <- [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // inicialización de la
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // cantidad de suciedad
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // presente en los
+    	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,   // últimos 50 ciclos
     	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     	                          0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -661,7 +661,7 @@ species suciedad {
 
     /**
      * Aspecto visual:
-     * - Representa la suciedad como un pequeño cuadrado de color según su tipo.
+     * - Representa la suciedad como un pequeño cuadrado de color según su tipo en una ubicación aleatoria.
      */
     aspect suciedad_aspecto {
         draw geometry: square(4) color: color_suciedad at: location;
@@ -690,15 +690,18 @@ experiment simulacion_limpieza type: gui {
         }
         
         display "estadísticas" type: 2d {
+        	// Serie temporal
         	chart "Cantidad de suciedad" type:series position:{0.0,0.0} size:{1.0,0.5} {
         		data "Media móvil (50 últimos ciclos)" value:media_suciedad color:#red;
 				data "Número de suciedades presentes" value:cantidad_suciedad color:#grey;
 			}
+			// Gráfico circular
 			chart "Tipo de suciedad" type: pie position:{0.5,0.5} size:{0.5,0.5} {
 				data "Polvo" value: num_polvo color: rgb("#a6a6a6");
 				data "Líquido" value: num_liquido color: rgb("#69a1ff");
 				data "Basura" value: num_basura color: rgb("#aa8222");
             }
+            // Gráfico de barras
             chart "Suciedad detectada por cada sensor" type:histogram position:{0.0,0.5} size:{0.5,0.5} {
         		data " " value:(sensor collect each.num_suciedades_detectadas) color:rgb("#ffa1a1");
 			}
